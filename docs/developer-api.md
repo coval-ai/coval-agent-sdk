@@ -14,24 +14,26 @@ Keep these responsibilities distinct: the SDK should not require an agent framew
 import asyncio
 import os
 
-from coval_voice import CovalVoiceClient, RunConfig
-from my_agent import create_agent
+import coval_voice
+import my_agent
+
 
 async def main():
-    client = CovalVoiceClient(
+    client = coval_voice.CovalVoiceClient(
         api_key=os.environ["COVAL_API_KEY"],
         workspace_id=os.environ["COVAL_WORKSPACE_ID"],
         api_base_url="https://api.coval.dev/v1-staging",
     )
     await client.run(
-        RunConfig(
+        coval_voice.RunConfig(
             agent_id="AGENT_ID",
             persona_id="PERSONA_ID",
             test_set_id="TEST_SET_ID",
             run_timeout_seconds=600,
         ),
-        create_agent,
+        my_agent.create_agent,
     )
+
 
 asyncio.run(main())
 ```
@@ -58,7 +60,7 @@ The proposed `VoiceSession` describes the simulation identity and negotiated aud
 Keep the current `RunConfig` shape while making completion inspectable in code:
 
 ```python
-result = await client.run(config, create_agent)
+result = await client.run(config, my_agent.create_agent)
 print(result.run_id, result.status)
 for conversation in result.conversations:
     print(conversation.simulation_id, conversation.status)

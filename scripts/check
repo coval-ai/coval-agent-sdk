@@ -5,6 +5,7 @@ python="$project_root/.venv/bin/python"
 validation_root=$(mktemp -d)
 trap 'rm -rf "$validation_root"' EXIT HUP INT TERM
 cd "$project_root"
+"$project_root/scripts/lint"
 "$python" -m build --outdir "$validation_root/dist"
 "$python" -m twine check "$validation_root"/dist/*
 uv venv --python "$python" "$validation_root/venv"
@@ -24,9 +25,5 @@ assert Path(coval_voice.__file__).is_relative_to(Path(sys.prefix))
 print("Installed coval-agent-sdk; imports resolve to the isolated wheel.")
 PYTHON
 env -u PYTHONPATH "$wheel_python" -m pytest --import-mode=importlib \
-  "$project_root/tests/test_client.py" \
-  "$project_root/tests/test_streaming.py" \
-  "$project_root/tests/test_tracing.py" -q
+  "$project_root/tests" -q
 env -u PYTHONPATH "$validation_root/venv/bin/coval-tunnel" --help
-"$project_root/.venv/bin/pyright" --pythonpath "$wheel_python" \
-  -p "$project_root/pyrightconfig.sdk.json"

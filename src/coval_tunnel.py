@@ -6,6 +6,6 @@ import sys
 from coval_voice import client
 
 if __name__ == "__main__":
-  client.cli()
+    client.cli()
 else:
-  sys.modules[__name__] = client
+    sys.modules[__name__] = client

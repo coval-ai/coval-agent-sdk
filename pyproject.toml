@@ -18,17 +18,66 @@ Source = "https://github.com/coval-ai/coval-agent-sdk"
 Documentation = "https://github.com/coval-ai/coval-agent-sdk#readme"
 
 [project.optional-dependencies]
-dev = ["build>=1.2,<2", "pytest>=8,<10", "pytest-asyncio>=0.24,<2", "pyright==1.1.414", "twine>=6,<7"]
+dev = [
+  "build>=1.2,<2",
+  "pytest>=8,<10",
+  "pytest-asyncio>=0.24,<2",
+  "pyright==1.1.414",
+  "ruff==0.17.1",
+  "twine>=6,<7",
+]
 
 [project.scripts]
-coval-tunnel = "coval_voice.client:cli"
+coval-tunnel = "coval_voice._cli:cli"
 
 [tool.setuptools]
+package-dir = {"" = "src"}
 py-modules = ["coval_tracing", "coval_tunnel"]
-packages = ["coval_voice"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+include = ["coval_voice*"]
+namespaces = false
 
 [tool.setuptools.package-data]
 coval_voice = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+
+[tool.ruff]
+required-version = "==0.17.1"
+target-version = "py310"
+line-length = 80
+src = ["src"]
+
+[tool.ruff.lint]
+select = [
+  "E", "F", "W", "I", "N", "UP", "B", "A", "C4", "DTZ", "ISC",
+  "C901", "ICN", "PIE", "PT", "RET", "SIM", "TID", "ARG", "PTH", "RUF",
+  "D", "ANN", "ASYNC", "S",
+]
+# Ruff formats long literals/comments best-effort; E501 still checks prose/code.
+ignore = ["ISC001"]  # Conflicts with the formatter's implicit concatenation.
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.ruff.lint.isort]
+force-single-line = true
+force-sort-within-sections = true
+order-by-type = false
+
+[tool.ruff.lint.flake8-tidy-imports]
+ban-relative-imports = "all"
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["ANN", "D", "S101", "S105", "S106", "ARG", "PT009", "PT027", "C901"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+docstring-code-format = true
+
+[tool.ruff.lint.mccabe]
+max-complexity = 15

@@ -11,6 +11,7 @@ The implementation is introduced in a draft PR against the README-only initial c
 ```bash
 scripts/install
 .venv/bin/coval-tunnel --help
+scripts/lint
 scripts/check
 ```
 
@@ -24,6 +25,8 @@ uv pip install --python /absolute/path/to/consumer/.venv/bin/python -e /absolute
 
 For an isolated consumer check, build with `scripts/build` and install the wheel from `dist/`. The existing Agent Playground PR can consume that wheel through `COVAL_VOICE_SDK_WHEEL`. Its default install still expects a package-index release; committed dependency rewiring is deferred until the developer API settles. A private Git dependency will require GitHub access for both developers and consumer CI.
 
+Read [contributing](CONTRIBUTING.md) and [Python conventions](docs/python-style.md) for repository layout, imports, initializers, Google docstrings, Ruff, and strict type checking.
+
 Read [local development](docs/local-development.md), [developer API design](docs/developer-api.md), and [extraction provenance](docs/extraction.md). The design document labels proposed interfaces separately from the executable API described below. This package is separate from the generated `coval-sdk`.
 
 ## Use as a library
@@ -34,19 +37,19 @@ After installation, import the client and pass a factory that creates a fresh ag
 import asyncio
 import os
 
-from coval_voice import CovalVoiceClient, RunConfig
-from my_agent import create_agent
+import coval_voice
+import my_agent
 
-client = CovalVoiceClient(
+client = coval_voice.CovalVoiceClient(
     api_key=os.environ["COVAL_API_KEY"],
     workspace_id=os.environ["COVAL_WORKSPACE_ID"],
 )
-config = RunConfig(
+config = coval_voice.RunConfig(
     agent_id="AGENT_ID",
     persona_id="PERSONA_ID",
     test_set_id="TEST_SET_ID",
 )
-asyncio.run(client.run(config, create_agent))
+asyncio.run(client.run(config, my_agent.create_agent))
 ```
 
 `create_agent(simulation_id)` returns an object with async `on_ready()`, `on_audio(bytes)`, and `close()` methods. Every call creates a fresh agent instance. The client fetches the WSS offer, opens the outbound connection, paces PCM16 audio, and closes the agent when the session ends. `client.connect(simulation_id, create_agent)` attaches to an already-created simulation instead.
@@ -65,9 +68,10 @@ Subclass `StreamingVoiceAgent` when ASR, LLM, and TTS work runs independently of
 
 ```python
 import asyncio
-from coval_voice import StreamingVoiceAgent
+import coval_voice
 
-class MyAgent(StreamingVoiceAgent):
+
+class MyAgent(coval_voice.StreamingVoiceAgent):
     def __init__(self, simulation_id, pipeline):
         self.pipeline = pipeline
         self.replies = asyncio.Queue(maxsize=100)
@@ -98,12 +102,14 @@ This release does not add relay clear/barge-in controls. Adapters must not claim
 Trace upload is optional. Create a `CovalTraceExporter`, pass it to Pipecat's `setup_tracing(exporter=...)`, and pass the same object to `CovalVoiceClient`. Configure each Pipecat `PipelineWorker` with `conversation_id=simulation_id`, using the ID passed to the agent factory. When a voice session ends, the client flushes ended spans and posts only that conversation's trace to `POST /v1/traces` with its simulation ID. For example:
 
 ```python
-from coval_voice import CovalTraceExporter, CovalVoiceClient
-from pipecat.utils.tracing.setup import setup_tracing
+import coval_voice
+from pipecat.utils.tracing import setup
 
-trace_exporter = CovalTraceExporter()
-setup_tracing(service_name="my-agent", exporter=trace_exporter)
-client = CovalVoiceClient(api_key=api_key, trace_exporter=trace_exporter)
+trace_exporter = coval_voice.CovalTraceExporter()
+setup.setup_tracing(service_name="my-agent", exporter=trace_exporter)
+client = coval_voice.CovalVoiceClient(
+    api_key=api_key, trace_exporter=trace_exporter
+)
 # In create_agent(simulation_id), set PipelineWorker(conversation_id=simulation_id).
 ```
 
