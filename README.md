@@ -1,4 +1,4 @@
-# coval-agent-sdk
+# coval-agents-sdk
 
 A standalone Python Voice Agent SDK developed in the private `coval-ai/coval-agent-sdk` repository. The installable distribution is `coval-agent-sdk==0.2.0a1`; Python imports remain `coval_voice` while the developer API is being designed. No package-registry release is published by this project.
 
