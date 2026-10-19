@@ -62,6 +62,8 @@ Use synthetic identifiers and audio. Do not make live API or provider calls in t
 
 Add public exports deliberately and document their ownership, inputs, outputs, error behavior, and cleanup obligations. Keep the importable package independent of any particular agent framework. Put unimplemented interfaces in [API design](docs/developer-api.md), clearly marked as proposals.
 
+Keep the SDK a Python library only. Return structured results and raise failures without printing, emitting log records, configuring logging, or adding console-script or package-execution entry points. Calling applications own presentation. Preserve useful diagnostics in returned outcomes and errors as described in [runtime contracts](docs/runtime.md#returned-outcomes); test that affected public operations return the expected information without writing console output or log records.
+
 For a new dependency, explain why the SDK needs it, its Python support, and its distribution/license implications. Update the affected tests and package metadata. Review dependency upgrades as code changes; do not relax constraints solely to silence a failing check.
 
 Update [CHANGELOG.md](CHANGELOG.md) under `Unreleased` when user-facing behavior, supported APIs, dependencies, or packaging changes. This is a pre-release SDK; do not invent a released compatibility promise for an internal helper.
