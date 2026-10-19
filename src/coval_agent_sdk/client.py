@@ -20,7 +20,6 @@ class CovalVoiceClient:
     relay offers or retry run creation.
 
     Attributes:
-        api: Authenticated HTTP transport used by the client.
         trace_exporter: Optional process-wide exporter for conversation traces.
     """
 
@@ -46,7 +45,7 @@ class CovalVoiceClient:
         Raises:
             ValueError: The API root does not use HTTP or HTTPS.
         """
-        self.api = _http.CovalApi(
+        self._api = _http.CovalApi(
             api_base_url=api_base_url,
             api_key=api_key,
             workspace_id=workspace_id,
@@ -74,7 +73,7 @@ class CovalVoiceClient:
                 Cancellation propagates after local resources are released.
         """
         return await _session.run_session(
-            self.api, simulation_id, agent_factory, self.trace_exporter
+            self._api, simulation_id, agent_factory, self.trace_exporter
         )
 
     async def run(
@@ -101,5 +100,5 @@ class CovalVoiceClient:
             Exception: Agent or transport setup fails.
         """
         return await _runs.launch_and_run(
-            self.api, config, agent_factory, self.trace_exporter
+            self._api, config, agent_factory, self.trace_exporter
         )

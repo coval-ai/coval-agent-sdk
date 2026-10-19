@@ -94,11 +94,11 @@ async def test_run_returns_identity_and_sessions_without_output(
         return {"run": {"status": hosted_status}}
 
     monkeypatch.setattr(
-        client.api,
+        client._api,
         "post",
         mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
     )
-    monkeypatch.setattr(client.api, "get", read)
+    monkeypatch.setattr(client._api, "get", read)
     monkeypatch.setattr(_connection, "open_voice_connection", connect)
     monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
     operation = client.run(
@@ -175,7 +175,7 @@ async def test_launch_failure_keeps_original_error_and_stays_silent(capsys):
     original = coval_agent_sdk.CovalHttpError(status_code=403, message="denied")
     with (
         mock.patch.object(
-            client.api, "post", mock.AsyncMock(side_effect=original)
+            client._api, "post", mock.AsyncMock(side_effect=original)
         ),
         pytest.raises(coval_agent_sdk.CovalHttpError) as failure,
     ):
@@ -193,12 +193,12 @@ async def test_post_launch_failure_retains_id_without_inventing_status(capsys):
     failure = coval_agent_sdk.CovalHttpError(status_code=403, message="denied")
     with (
         mock.patch.object(
-            client.api,
+            client._api,
             "post",
             mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
         ),
         mock.patch.object(
-            client.api, "get", mock.AsyncMock(side_effect=failure)
+            client._api, "get", mock.AsyncMock(side_effect=failure)
         ),
         pytest.raises(coval_agent_sdk.RunError) as raised,
     ):

@@ -113,11 +113,11 @@ class BaseInstallationTest(unittest.IsolatedAsyncioTestCase):
         with (
             mock.patch.object(_connection, "open_voice_connection", connect),
             mock.patch.object(
-                client.api,
+                client._api,
                 "post",
                 mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
             ),
-            mock.patch.object(client.api, "get", read),
+            mock.patch.object(client._api, "get", read),
             mock.patch.object(_defaults, "POLL_INTERVAL_SECONDS", 0),
             contextlib.redirect_stdout(output),
             contextlib.redirect_stderr(errors),

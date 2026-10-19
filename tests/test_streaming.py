@@ -1,17 +1,17 @@
 """Behavior of independently produced audio through the public voice client."""
 
 import asyncio
-import io
 import json
 import subprocess
 import sys
 import types
 from unittest import mock
-from urllib import error
 
 from opentelemetry.sdk import trace as sdk_trace
 from opentelemetry.sdk.trace import export as trace_export
 import pytest
+import urllib3
+from urllib3 import exceptions as http_exceptions
 from websockets import exceptions
 from websockets import frames
 
@@ -19,7 +19,6 @@ import coval_agent_sdk
 from coval_agent_sdk import _audio
 from coval_agent_sdk import _connection
 from coval_agent_sdk import _defaults
-from coval_agent_sdk import _http
 from coval_agent_sdk import tracing
 
 READY = json.dumps(
@@ -265,22 +264,24 @@ async def test_custom_workspace_is_forwarded_on_reads_and_run_launches(
 ):
     requests = []
 
-    def urlopen(request, **kwargs):
-        requests.append(request)
-        return io.BytesIO(b'{"ok": true}')
+    def request(self, method, url, **kwargs):
+        requests.append((method, url, kwargs))
+        return urllib3.HTTPResponse(b'{"ok": true}', status=200)
 
-    monkeypatch.setattr(_http.request, "urlopen", urlopen)
+    monkeypatch.setattr(urllib3.PoolManager, "request", request)
     voice = coval_agent_sdk.CovalVoiceClient(
         api_key="synthetic-key", workspace_id="workspace-a"
     )
-    await voice.api.get("simulations/simulation-a/connect")
-    await voice.api.post("runs", {"agent_id": "agent-a"})
-    assert [request.get_method() for request in requests] == ["GET", "POST"]
-    for request in requests:
-        headers = {key.lower(): value for key, value in request.header_items()}
+    await voice._api.get("simulations/simulation-a/connect")
+    await voice._api.post("runs", {"agent_id": "agent-a"})
+    assert [item[0] for item in requests] == ["GET", "POST"]
+    for _, _, options in requests:
+        headers = {
+            key.lower(): value for key, value in options["headers"].items()
+        }
         assert headers["x-coval-workspace-id"] == "workspace-a"
         assert headers["x-api-key"] == "synthetic-key"
-    assert json.loads(requests[1].data) == {"agent_id": "agent-a"}
+    assert json.loads(requests[1][2]["body"]) == {"agent_id": "agent-a"}
 
 
 def test_public_package_imports_its_own_tracing_module(tmp_path):
@@ -327,13 +328,14 @@ async def test_missing_terminal_frame_confirms_completion_and_uploads(
     requests = []
     states = iter(["IN PROGRESS", "COMPLETED"])
 
-    def urlopen(request, **kwargs):
-        requests.append(request)
-        return io.BytesIO(
-            json.dumps({"simulation": {"status": next(states)}}).encode()
+    def request(self, method, url, **kwargs):
+        requests.append((url, kwargs["headers"]))
+        return urllib3.HTTPResponse(
+            json.dumps({"simulation": {"status": next(states)}}).encode(),
+            status=200,
         )
 
-    monkeypatch.setattr(_http.request, "urlopen", urlopen)
+    monkeypatch.setattr(urllib3.PoolManager, "request", request)
 
     class TracedAgent(StreamingAgent):
         async def close(self):
@@ -361,12 +363,9 @@ async def test_missing_terminal_frame_confirms_completion_and_uploads(
         assert agent.stream_closed
         assert socket.closed
         assert len(requests) == 2
-        for request in requests:
-            assert request.full_url.endswith("/simulations/simulation-a")
-            assert (
-                dict(request.header_items())["X-coval-workspace-id"]
-                == "workspace-a"
-            )
+        for url, headers in requests:
+            assert url.endswith("/simulations/simulation-a")
+            assert headers["X-Coval-Workspace-Id"] == "workspace-a"
         assert (
             constructor.call_args.kwargs["headers"]["X-Coval-Workspace-Id"]
             == "workspace-a"
@@ -408,24 +407,22 @@ async def test_socket_failure_is_preserved_without_authoritative_completion(
     monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
     requests = []
 
-    def urlopen(request, **kwargs):
-        requests.append(request)
+    def request(self, method, url, **kwargs):
+        requests.append(url)
         if outcome == "UNREACHABLE":
-            raise error.URLError("synthetic connection failure")
+            raise http_exceptions.NewConnectionError(None, "synthetic failure")
         if outcome == "UNAUTHORIZED":
-            raise error.HTTPError(
-                request.full_url, 401, "Unauthorized", {}, io.BytesIO(b"denied")
-            )
+            return urllib3.HTTPResponse(b"denied", status=401)
         if outcome == "INVALID_JSON":
-            return io.BytesIO(b"not-json")
+            return urllib3.HTTPResponse(b"not-json", status=200)
         payload = (
             {}
             if outcome == "MALFORMED"
             else {"simulation": {"status": outcome}}
         )
-        return io.BytesIO(json.dumps(payload).encode())
+        return urllib3.HTTPResponse(json.dumps(payload).encode(), status=200)
 
-    monkeypatch.setattr(_http.request, "urlopen", urlopen)
+    monkeypatch.setattr(urllib3.PoolManager, "request", request)
     agent = StreamingAgent()
     exporter = mock.Mock()
     session = asyncio.create_task(
@@ -463,7 +460,7 @@ async def test_explicit_relay_failures_do_not_query_for_success(
     )
     voice = coval_agent_sdk.CovalVoiceClient(api_key="key")
     read = mock.AsyncMock(return_value={"simulation": {"status": "COMPLETED"}})
-    monkeypatch.setattr(voice.api, "get", read)
+    monkeypatch.setattr(voice._api, "get", read)
     agent = StreamingAgent()
     session = asyncio.create_task(
         voice.connect("simulation-a", lambda _: agent)
@@ -500,7 +497,7 @@ async def test_close_before_ready_cannot_claim_completion(
     )
     voice = coval_agent_sdk.CovalVoiceClient(api_key="key")
     read = mock.AsyncMock(return_value={"simulation": {"status": "COMPLETED"}})
-    monkeypatch.setattr(voice.api, "get", read)
+    monkeypatch.setattr(voice._api, "get", read)
     agent = StreamingAgent()
     with pytest.raises(exceptions.ConnectionClosedError):
         await asyncio.wait_for(
@@ -533,7 +530,7 @@ async def test_cancel_during_verification_closes_and_discards(
     voice = coval_agent_sdk.CovalVoiceClient(
         api_key="key", trace_exporter=exporter
     )
-    monkeypatch.setattr(voice.api, "get", read)
+    monkeypatch.setattr(voice._api, "get", read)
     agent = StreamingAgent()
     session = asyncio.create_task(
         voice.connect("simulation-a", lambda _: agent)

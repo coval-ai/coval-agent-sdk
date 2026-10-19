@@ -64,6 +64,8 @@ Add public exports deliberately and document their ownership, inputs, outputs, e
 
 Keep the SDK a Python library only. Return structured results and raise failures without printing, emitting log records, configuring logging, or adding console-script or package-execution entry points. Calling applications own presentation. Preserve useful diagnostics in returned outcomes and errors as described in [runtime contracts](docs/runtime.md#returned-outcomes); test that affected public operations return the expected information without writing console output or log records.
 
+Keep `coval-sdk` and its HTTP dependency inside the private `_http.py` adapter. Do not expose dependency clients, configuration, models, raw responses, or exception types through public attributes, parameters, return values, or exports. Translate request failures into this package's errors at that boundary; orchestration owns read retries, and run creation must remain a single attempt. Do not enable dependency debug output or change application logging configuration.
+
 Put optional integration dependencies in a named extra and declare every external package imported directly by that integration. Keep the base SDK importable and runnable without those dependencies. OpenTelemetry belongs only in `coval_agent_sdk.tracing`; core code uses the dependency-free `TraceExporter` contract. `scripts/check` first exercises a clean base wheel installation, then installs `[tracing]` and runs the full suite.
 
 For a new dependency, explain why the SDK needs it, its Python support, and its distribution/license implications. Update the affected tests and package metadata. Review dependency upgrades as code changes; do not relax constraints solely to silence a failing check.

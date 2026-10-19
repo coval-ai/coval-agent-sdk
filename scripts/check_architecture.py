@@ -53,7 +53,7 @@ _DEPENDENCIES: dict[str, set[str]] = {
     "__init__": {"agent", "client", "config", "errors", "results", "telemetry"},
 }
 _FACADES = {"__init__"}
-_EXTERNAL_ROOTS = {"opentelemetry", "websockets"}
+_EXTERNAL_ROOTS = {"coval_sdk", "urllib3", "opentelemetry", "websockets"}
 
 
 def check_package(package: pathlib.Path) -> list[str]:
@@ -116,6 +116,10 @@ def _check_import(
         if target not in _DEPENDENCIES[owner]:
             messages.append(f"{owner} must not depend on {target}")
     for root in roots:
+        if root in {"coval_sdk", "urllib3"} and owner != "_http":
+            messages.append(
+                "keep API SDK dependencies in the private HTTP adapter"
+            )
         if root == "opentelemetry" and owner != "tracing":
             messages.append("keep OpenTelemetry in the optional tracing module")
         if root not in (

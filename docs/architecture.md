@@ -14,7 +14,7 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 | `client.py` | Public `run()` and `connect()` orchestration. |
 | `telemetry.py` | Dependency-free trace lifecycle protocol used by the client. |
 | `tracing.py` | Optional OpenTelemetry provider flush, buffers, and upload lifecycle. |
-| `_http.py` | Authenticated JSON requests; mutation requests are not retried. |
+| `_http.py` | Private Coval API SDK adapter, JSON validation, error translation, and request resource cleanup; mutation requests are not retried. |
 | `_connection.py` | Offer discovery and one-use WebSocket connection setup. |
 | `_audio.py` | Outgoing PCM pacing, reply budgets, and streaming producer ownership. |
 | `_session.py` | One agent/socket session, readiness, input acknowledgements, and cleanup. |
@@ -30,6 +30,12 @@ Public client methods call run/session orchestration. Orchestration depends on c
 Internal code imports owning modules rather than the root public facade. The root initializer is the only symbol-reexport facade. Do not introduce a cycle or move an import inside a function to hide one. `scripts/check_architecture.py` checks the allowed first-party dependency graph, top-level absolute imports, production dependency roots, and initializer contents.
 
 A new module requires an explicit dependency policy in that checker. Choose its responsibility from the behavior and state it owns; the policy is not a reason to split one operation into forwarding functions. Import conventions and size/complexity review signals live in [Python conventions](python-style.md).
+
+`coval-sdk` supplies authentication, serialization, and HTTP requests and supports Python 3.9 and newer, within this package's Python 3.10 minimum. It is MIT-licensed and installed as a dependency rather than vendored. The direct `urllib3` dependency declares the network exception types the adapter translates; it is also MIT-licensed.
+
+Only `_http.py` imports `coval_sdk` and `urllib3`; the architecture checker enforces this boundary. The public client owns a private `_api` adapter. Public signatures, results, attributes, and exports contain no API SDK objects or types. Request failures become agent SDK errors rather than passing dependency exceptions to applications.
+
+The adapter uses the API SDK's request serialization and client methods because connection discovery is absent from its generated endpoint set. It validates JSON objects before orchestration consumes them. Each blocking request owns its API client and connection pool, which is cleared in the worker thread after success or failure. Cancellation stops waiting on that worker; the worker still releases its resources when the request finishes or times out. No shared SDK defaults or debug logging settings are modified.
 
 ## State and resources
 

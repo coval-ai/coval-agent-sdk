@@ -22,7 +22,7 @@ The SDK does not implement relay clear/barge-in controls. An adapter must not cl
 
 ## Discovery and connection
 
-Every API request carries the configured API key and optional workspace selector. API roots must use HTTP or HTTPS; relay offers must use WSS. The one-use relay token is sent in the WebSocket upgrade's `Authorization` header, not in ordinary diagnostics.
+Every API request uses the Coval API SDK through a private adapter and carries the configured API key and optional workspace selector. The adapter disables automatic transport retries, translates dependency failures into agent SDK errors, and releases each request's connection pool. API roots must use HTTP or HTTPS; relay offers must use WSS. The one-use relay token is sent in the WebSocket upgrade's `Authorization` header, not in ordinary diagnostics.
 
 Offer discovery retries documented temporary HTTP/network failures and waits while an attempt is pending, provisioning, or expired and awaiting replacement. A ready offer must contain a secure URL, a nonempty token, and a future expiry. Authentication/permanent failures, unknown states, and attempts that ended before attachment fail visibly.
 

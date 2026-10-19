@@ -7,8 +7,10 @@ import json
 import time
 import unittest
 from unittest import mock
-from urllib import error
 
+import urllib3
+from urllib3 import exceptions as http_exceptions
+from urllib3 import response as http_response
 from websockets import exceptions
 from websockets import frames
 
@@ -236,10 +238,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
             errors.CovalHttpError(status_code=status, message="temporary")
             for status in _defaults.RETRYABLE_HTTP_STATUSES
         ]
-        failures += [
-            errors.CovalConnectionError("unreachable"),
-            error.URLError("unreachable"),
-        ]
+        failures.append(errors.CovalConnectionError("unreachable"))
         for failure in failures:
             with self.subTest(failure=failure):
                 api = mock.Mock()
@@ -480,15 +479,17 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
             "token": "test-token",
             "expires_at": TOKEN_EXPIRES_AT_EPOCH_SECONDS,
         }
-        response = mock.MagicMock()
-        response.__enter__.return_value.read.return_value = json.dumps(
-            ready
-        ).encode()
+        response = http_response.HTTPResponse(
+            json.dumps(ready).encode(), status=200
+        )
         with (
             mock.patch.object(
-                _http.request,
-                "urlopen",
-                side_effect=[error.URLError("temporary DNS failure"), response],
+                urllib3.PoolManager,
+                "request",
+                side_effect=[
+                    http_exceptions.NewConnectionError(None, "DNS failure"),
+                    response,
+                ],
             ),
             mock.patch.object(asyncio, "sleep", new=mock.AsyncMock()) as sleep,
         ):

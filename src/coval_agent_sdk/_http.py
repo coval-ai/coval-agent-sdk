@@ -6,16 +6,19 @@ import asyncio
 import json
 from typing import Any
 from typing import cast
-from urllib import error
 from urllib import parse
-from urllib import request
+
+from coval_sdk import api_client
+from coval_sdk import configuration
+from coval_sdk import exceptions
+from urllib3 import exceptions as http_exceptions
 
 from coval_agent_sdk import _defaults
 from coval_agent_sdk import errors
 
 
 class CovalApi:
-    """Small HTTP client for the MVP, independent of generated SDK models."""
+    """Private JSON adapter around the Coval API SDK request client."""
 
     def __init__(
         self,
@@ -78,46 +81,73 @@ class CovalApi:
         query: dict[str, str] | None,
         payload: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        url = f"{self.api_base_url}/{path.lstrip('/')}"
-        if query:
-            url = f"{url}?{parse.urlencode(query)}"
-        body = (
-            json.dumps(payload).encode("utf-8") if payload is not None else None
+        settings = configuration.Configuration(
+            host=self.api_base_url,
+            api_key={"Coval_Agents_API_ApiKeyAuth": self.api_key},
+            retries=0,
         )
+        # The generated client leaves request/response members untyped. Keep
+        # that dynamic boundary here and validate JSON before returning it.
+        sdk: Any = api_client.ApiClient(settings)
         headers = {
-            "x-api-key": self.api_key,
             "Accept": "application/json",
             "Content-Type": "application/json",
         }
         if self.workspace_id is not None:
             headers["X-Coval-Workspace-Id"] = self.workspace_id
-        api_request = request.Request(  # noqa: S310 - HTTP(S) validated above.
-            url,
-            data=body,
-            method=method,
-            headers=headers,
-        )
         try:
-            with request.urlopen(  # noqa: S310 - HTTP(S) validated above.
-                api_request, timeout=_defaults.HTTP_TIMEOUT_SECONDS
-            ) as response:
-                response_payload = json.load(response)
-        except error.HTTPError as exception:
-            response_body = exception.read(500).decode(
-                "utf-8", errors="replace"
+            # Discovery is not in the generated endpoint set. Keep request
+            # serialization and transport in the API SDK; models stay private.
+            parameters = sdk.param_serialize(
+                method=method,
+                resource_path=f"/{path.lstrip('/')}",
+                query_params=list((query or {}).items()),
+                header_params=headers,
+                body=payload,
+                auth_settings=["Coval_Agents_API_ApiKeyAuth"],
             )
-            raise errors.CovalHttpError(
-                status_code=exception.code,
-                message=(
-                    f"Coval {method} {path} returned HTTP "
-                    f"{exception.code}: {response_body}"
-                ),
-            ) from exception
-        except error.URLError as exception:
+            response = sdk.call_api(
+                *parameters,
+                _request_timeout=_defaults.HTTP_TIMEOUT_SECONDS,
+            )
+            try:
+                body = response.read()
+                if not 200 <= response.status <= 299:
+                    detail = body[:500].decode("utf-8", errors="replace")
+                    raise errors.CovalHttpError(
+                        status_code=response.status,
+                        message=(
+                            f"Coval {method} {path} returned HTTP "
+                            f"{response.status}: {detail}"
+                        ),
+                    )
+                response_payload: object = json.loads(body)
+            finally:
+                response.response.close()
+                response.response.release_conn()
+        except exceptions.ApiException as exception:
+            status: object = cast(Any, exception).status
+            if isinstance(status, int) and status != 0:
+                raise errors.CovalHttpError(
+                    status_code=status,
+                    message=(f"Coval {method} {path} returned HTTP {status}."),
+                ) from None
             raise errors.CovalConnectionError(
-                f"Coval {method} {path} could not reach "
-                f"{url}: {exception.reason}"
-            ) from exception
+                f"Coval {method} {path} could not reach the API."
+            ) from None
+        except (http_exceptions.HTTPError, OSError) as exception:
+            raise errors.CovalConnectionError(
+                f"Coval {method} {path} could not reach the API: "
+                f"{type(exception).__name__}."
+            ) from None
+        except (ValueError, UnicodeError):
+            raise errors.TunnelError(
+                f"Coval {method} {path} returned invalid JSON."
+            ) from None
+        finally:
+            # A cancelled coroutine cannot stop its blocking worker. The worker
+            # retains ownership and releases its pool after the bounded request.
+            sdk.rest_client.pool_manager.clear()
         if not isinstance(response_payload, dict):
             raise errors.TunnelError(
                 f"Coval {method} {path} returned a non-object JSON response."

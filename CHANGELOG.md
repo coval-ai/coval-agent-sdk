@@ -13,3 +13,4 @@ User-facing changes are recorded here. This project is in pre-release developmen
 - Typed package distributions, isolated-wheel validation, and supported-Python CI.
 - Google-based Python conventions, Ruff, strict Pyright, architecture checks, contribution guidance, and Apache-2.0 licensing.
 - Optional OpenTelemetry dependencies through `[tracing]`, with a dependency-free core trace contract and the concrete exporter in `coval_agent_sdk.tracing`.
+- Internal use of `coval-sdk` behind a private HTTP adapter, with no public transport client or generated API types.

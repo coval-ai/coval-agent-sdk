@@ -6,7 +6,6 @@ import asyncio
 import dataclasses
 import time
 from typing import Any
-from urllib import error
 from urllib import parse
 
 from coval_agent_sdk import _defaults
@@ -41,7 +40,7 @@ async def _get_monitoring_resource(
             if exception.status_code not in _defaults.RETRYABLE_HTTP_STATUSES:
                 raise
             last_error = exception
-        except (errors.CovalConnectionError, error.URLError) as exception:
+        except errors.CovalConnectionError as exception:
             last_error = exception
         except asyncio.TimeoutError as exception:
             raise errors.TunnelError(

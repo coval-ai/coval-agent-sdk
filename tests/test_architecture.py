@@ -31,6 +31,8 @@ def _check(tmp_path, module, source):
         ("_session", "from coval_agent_sdk import _connection\n"),
         ("config", "from coval_agent_sdk import _defaults\n"),
         ("tracing", "from opentelemetry import trace\n"),
+        ("_http", "from coval_sdk import api_client\n"),
+        ("_http", "from urllib3 import exceptions\n"),
         (
             "__init__",
             (
@@ -66,6 +68,13 @@ def test_architecture_accepts_owning_modules_and_explicit_exports(
         ("_session", "from opentelemetry import trace\n", "optional tracing"),
         ("client", "from coval_agent_sdk import tracing\n", "must not depend"),
         ("misc", "", "ownership policy"),
+        ("client", "import coval_sdk\n", "private HTTP adapter"),
+        (
+            "__init__",
+            "from coval_sdk import ApiClient\n",
+            "private HTTP adapter",
+        ),
+        ("_runs", "import urllib3\n", "private HTTP adapter"),
         ("__init__", "initialize()\n", "only declare public exports"),
         (
             "__init__",

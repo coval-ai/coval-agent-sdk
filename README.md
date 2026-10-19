@@ -54,6 +54,8 @@ if __name__ == "__main__":
 
 `my_agent` is your adapter module. Its `create_agent(simulation_id)` factory returns a fresh agent for each conversation. Use `await client.connect(simulation_id, my_agent.create_agent)` to attach to an existing simulation. `run()` returns a `RunResult`; `connect()` returns a `SessionResult`. The SDK does not print, log, configure logging, or provide a command-line interface.
 
+The Coval API SDK is an internal dependency. Applications use this package's client, configuration, results, and errors; API transport clients and generated models are not part of the supported interface.
+
 The client defaults to `https://api.coval.dev/v1`. Pass `api_base_url` to select another environment, and select the intended workspace explicitly when testing. An API key must be authorized for that workspace. Local installation, imports, and automated tests do not require an API key.
 
 ## Implement an adapter

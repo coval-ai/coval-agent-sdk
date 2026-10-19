@@ -86,7 +86,8 @@ def test_client_accepts_http_and_https_api_roots(url):
     voice = coval_agent_sdk.CovalVoiceClient(
         api_key="synthetic-key", api_base_url=url
     )
-    assert voice.api.api_base_url == url
+    assert voice._api.api_base_url == url
+    assert not hasattr(voice, "api")
 
 
 def test_distribution_declares_and_contains_license_notices():
@@ -121,8 +122,10 @@ def test_opentelemetry_dependencies_belong_only_to_tracing_extra():
             if item.marker is None or item.marker.evaluate({"extra": extra})
         }
 
-    assert dependencies("") == {"websockets"}
+    assert dependencies("") == {"coval-sdk", "urllib3", "websockets"}
     assert dependencies("tracing") == {
+        "coval-sdk",
+        "urllib3",
         "websockets",
         "opentelemetry-api",
         "opentelemetry-sdk",
