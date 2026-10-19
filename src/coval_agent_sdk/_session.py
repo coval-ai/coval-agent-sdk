@@ -15,13 +15,13 @@ from opentelemetry import trace
 from websockets import exceptions
 from websockets.asyncio import client
 
-from coval_voice import _audio
-from coval_voice import _connection
-from coval_voice import _defaults
-from coval_voice import _http
-from coval_voice import agent as agent_contract
-from coval_voice import errors
-from coval_voice import tracing
+from coval_agent_sdk import _audio
+from coval_agent_sdk import _connection
+from coval_agent_sdk import _defaults
+from coval_agent_sdk import _http
+from coval_agent_sdk import agent as agent_contract
+from coval_agent_sdk import errors
+from coval_agent_sdk import tracing
 
 
 def _add_cleanup_note(exception: BaseException, note: str) -> None:

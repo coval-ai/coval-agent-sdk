@@ -7,12 +7,12 @@ import sys
 
 import pytest
 
-import coval_voice
-from coval_voice import agent
-from coval_voice import client
-from coval_voice import config
-from coval_voice import errors
-from coval_voice import tracing
+import coval_agent_sdk
+from coval_agent_sdk import agent
+from coval_agent_sdk import client
+from coval_agent_sdk import config
+from coval_agent_sdk import errors
+from coval_agent_sdk import tracing
 
 
 def test_public_facade_exports_the_documented_definitions():
@@ -27,22 +27,36 @@ def test_public_facade_exports_the_documented_definitions():
         "TunnelError": errors.TunnelError,
         "VoiceAgent": agent.VoiceAgent,
     }
-    assert set(coval_voice.__all__) == set(expected)
+    assert set(coval_agent_sdk.__all__) == set(expected)
     for name, definition in expected.items():
-        assert getattr(coval_voice, name) is definition
+        assert getattr(coval_agent_sdk, name) is definition
 
 
 def test_distribution_includes_types_and_no_tests_or_backend():
     package = importlib.metadata.distribution("coval-agent-sdk")
     assert package.metadata["Name"] == "coval-agent-sdk"
-    assert pathlib.Path(coval_voice.__file__).with_name("py.typed").is_file()
+    assert package.read_text("top_level.txt").split() == ["coval_agent_sdk"]
+    assert [
+        (entry.name, entry.value)
+        for entry in package.entry_points
+        if entry.group == "console_scripts"
+    ] == [("coval-agent", "coval_agent_sdk._cli:cli")]
+    assert (
+        pathlib.Path(coval_agent_sdk.__file__).with_name("py.typed").is_file()
+    )
     files = {str(path) for path in package.files or ()}
     assert not any(path.startswith(("tests/", "backend/")) for path in files)
 
 
-def test_package_cli_help_works_without_credentials(tmp_path):
-    result = subprocess.run(
-        [sys.executable, "-I", "-m", "coval_voice", "--help"],
+@pytest.mark.parametrize("entry_point", ["module", "console"])
+def test_package_cli_help_works_without_credentials(tmp_path, entry_point):
+    command = (
+        [sys.executable, "-I", "-m", "coval_agent_sdk"]
+        if entry_point == "module"
+        else [str(pathlib.Path(sys.executable).with_name("coval-agent"))]
+    )
+    result = subprocess.run(  # noqa: S603 - Fixed installed entry points only.
+        [*command, "--help"],
         cwd=tmp_path,
         check=True,
         capture_output=True,
@@ -59,14 +73,16 @@ def test_package_cli_help_works_without_credentials(tmp_path):
 )
 def test_client_rejects_non_http_api_roots(url):
     with pytest.raises(ValueError, match="http or https"):
-        coval_voice.CovalVoiceClient(api_key="synthetic-key", api_base_url=url)
+        coval_agent_sdk.CovalVoiceClient(
+            api_key="synthetic-key", api_base_url=url
+        )
 
 
 @pytest.mark.parametrize(
     "url", ["http://127.0.0.1:8081/v1", "https://api.coval.dev/v1"]
 )
 def test_client_accepts_http_and_https_api_roots(url):
-    voice = coval_voice.CovalVoiceClient(
+    voice = coval_agent_sdk.CovalVoiceClient(
         api_key="synthetic-key", api_base_url=url
     )
     assert voice.api.api_base_url == url

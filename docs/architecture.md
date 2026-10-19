@@ -6,7 +6,7 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 
 | Module | Owns |
 | --- | --- |
-| `src/coval_voice/__init__.py` | The explicit supported public API and its `__all__`. |
+| `src/coval_agent_sdk/__init__.py` | The explicit supported public API and its `__all__`. |
 | `agent.py` | Callback protocol, streaming abstract base class, and per-conversation factory type. |
 | `config.py` | Immutable run configuration and its validation. |
 | `errors.py` | API and relay errors exposed to callers. |
@@ -18,10 +18,10 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 | `_session.py` | One agent/socket session, readiness, input acknowledgements, and cleanup. |
 | `_runs.py` | Run launch, paginated conversation discovery, monitoring, and sibling cancellation. |
 | `_cli.py` | Arguments, environment configuration, adapter loading, and CLI exit status. |
-| `__main__.py` | The `python -m coval_voice` entry point. |
+| `__main__.py` | The `python -m coval_agent_sdk` entry point. |
 | `_defaults.py` | Internal protocol limits and timeout defaults. |
 
-Paths without a directory prefix in this table are relative to `src/coval_voice/`. Modules beginning with `_` are implementation details; import the documented API from `coval_voice` in a consumer.
+Paths without a directory prefix in this table are relative to `src/coval_agent_sdk/`. Modules beginning with `_` are implementation details; import the documented API from `coval_agent_sdk` in a consumer.
 
 ## Dependency direction
 

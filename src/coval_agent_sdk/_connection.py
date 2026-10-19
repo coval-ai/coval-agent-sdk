@@ -10,9 +10,9 @@ from urllib import parse
 from websockets import exceptions
 from websockets.asyncio import client
 
-from coval_voice import _defaults
-from coval_voice import _http
-from coval_voice import errors
+from coval_agent_sdk import _defaults
+from coval_agent_sdk import _http
+from coval_agent_sdk import errors
 
 
 @dataclasses.dataclass(frozen=True)

@@ -12,16 +12,16 @@ from urllib import error
 from websockets import exceptions
 from websockets import frames
 
-from coval_voice import _audio
-from coval_voice import _connection
-from coval_voice import _defaults
-from coval_voice import _http
-from coval_voice import _runs
-from coval_voice import _session
-from coval_voice import client as voice_client
-from coval_voice import config as run_config
-from coval_voice import errors
-from coval_voice import tracing
+from coval_agent_sdk import _audio
+from coval_agent_sdk import _connection
+from coval_agent_sdk import _defaults
+from coval_agent_sdk import _http
+from coval_agent_sdk import _runs
+from coval_agent_sdk import _session
+from coval_agent_sdk import client as voice_client
+from coval_agent_sdk import config as run_config
+from coval_agent_sdk import errors
+from coval_agent_sdk import tracing
 
 TOKEN_EXPIRES_AT_EPOCH_SECONDS = 9_999_999_999
 SESSION_READY = (

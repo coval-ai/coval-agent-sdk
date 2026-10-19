@@ -6,12 +6,12 @@ Use Python 3.12 and `uv` for the normal development environment. Runtime code su
 
 ```sh
 scripts/install
-.venv/bin/python -m coval_voice --help
+.venv/bin/python -m coval_agent_sdk --help
 ```
 
 `scripts/install` creates `.venv` when absent and installs the SDK with development dependencies in editable mode. Source changes are immediately available in that environment. To choose another supported interpreter in a fresh checkout, set `PYTHON_VERSION` when running the install script.
 
-Use `.venv/bin/python` and `.venv/bin/coval-tunnel` explicitly. No API key is needed for setup, CLI help, lint, type checking, builds, or tests. Live use requires an authorized Coval API key, workspace, and synthetic agent/persona/test-set fixtures; an adapter may also need its own provider credentials.
+Use `.venv/bin/python` and `.venv/bin/coval-agent` explicitly. No API key is needed for setup, CLI help, lint, type checking, builds, or tests. Live use requires an authorized Coval API key, workspace, and synthetic agent/persona/test-set fixtures; an adapter may also need its own provider credentials.
 
 ## Checks and builds
 
@@ -44,7 +44,7 @@ uv pip install --python /path/to/consumer/.venv/bin/python \
 
 Run the consumer's relevant tests against that installed wheel. Editable-install success does not prove that the source archive or wheel contains every required file.
 
-The Agent Playground Pipecat adapter is one consumer. Its local install hook accepts `COVAL_VOICE_SDK_WHEEL=/absolute/path/to/the/wheel`. Provider configuration and framework dependencies stay with that adapter, not in this package.
+The Agent Playground Pipecat adapter is one consumer. Its local install hook accepts `COVAL_AGENT_SDK_WHEEL=/absolute/path/to/the/wheel`. Provider configuration and framework dependencies stay with that adapter, not in this package.
 
 ## Live checks
 

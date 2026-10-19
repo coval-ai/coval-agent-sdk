@@ -14,18 +14,18 @@ Keep these responsibilities distinct: the SDK should not require an agent framew
 import asyncio
 import os
 
-import coval_voice
+import coval_agent_sdk
 import my_agent
 
 
 async def main():
-    client = coval_voice.CovalVoiceClient(
+    client = coval_agent_sdk.CovalVoiceClient(
         api_key=os.environ["COVAL_API_KEY"],
         workspace_id=os.environ["COVAL_WORKSPACE_ID"],
         api_base_url="https://api.coval.dev/v1-staging",
     )
     await client.run(
-        coval_voice.RunConfig(
+        coval_agent_sdk.RunConfig(
             agent_id="AGENT_ID",
             persona_id="PERSONA_ID",
             test_set_id="TEST_SET_ID",
@@ -70,7 +70,7 @@ The proposed result describes persisted execution outcomes and identifiers. Metr
 
 ### 3. Make Setup and Failures Legible
 
-The installable distribution name is `coval-agent-sdk`. Python imports remain `coval_voice` and the console command remains `coval-tunnel`; any changes to those interfaces are separate design decisions. Avoid adding a second client class just to shorten its name. Make the selected environment and workspace clear at the entry point; do not silently change the selected environment or API default.
+The installable distribution name is `coval-agent-sdk`. Python imports use `coval_agent_sdk` and the console command is `coval-agent`. The SDK is unreleased and has no backward-compatibility obligations; update consumers with an intentional API change instead of adding aliases or deprecation paths. Avoid adding a second client class just to shorten its name. Make the selected environment and workspace clear at the entry point; do not silently change the selected environment or API default.
 
 Separate fixture/configuration mistakes, authentication failures, provider errors, transport/backpressure failures, timeouts, and telemetry warnings in the developer-facing result/error contract. Keep run and simulation IDs available for debugging. Never include credentials or one-use relay offers in result objects or normal diagnostics.
 

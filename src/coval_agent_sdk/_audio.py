@@ -7,9 +7,9 @@ import time
 
 from websockets.asyncio import client
 
-from coval_voice import _defaults
-from coval_voice import agent as agent_contract
-from coval_voice import errors
+from coval_agent_sdk import _defaults
+from coval_agent_sdk import agent as agent_contract
+from coval_agent_sdk import errors
 
 
 async def send_paced_audio(

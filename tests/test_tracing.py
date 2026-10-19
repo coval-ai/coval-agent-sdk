@@ -7,7 +7,7 @@ from opentelemetry import trace
 from opentelemetry.sdk import trace as sdk_trace
 from opentelemetry.sdk.trace import export as trace_export
 
-from coval_voice import tracing
+from coval_agent_sdk import tracing
 
 
 def make_span(
@@ -50,7 +50,7 @@ class TraceExporterTest(unittest.TestCase):
             trace_export.SpanExportResult.SUCCESS
         )
         with mock.patch(
-            "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
             return_value=otlp_exporter,
         ) as factory:
             uploaded_count = collector.upload(
@@ -114,7 +114,7 @@ class TraceExporterTest(unittest.TestCase):
         otlp_exporter = mock.Mock()
         otlp_exporter.export.side_effect = export_during_upload
         with mock.patch(
-            "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
             return_value=otlp_exporter,
         ):
             self.assertEqual(
@@ -153,7 +153,7 @@ class TraceExporterTest(unittest.TestCase):
                     trace_export.SpanExportResult.SUCCESS
                 )
                 with mock.patch(
-                    "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+                    "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
                     return_value=otlp_exporter,
                 ):
                     self.assertEqual(
@@ -200,7 +200,7 @@ class TraceExporterTest(unittest.TestCase):
             trace_export.SpanExportResult.SUCCESS
         )
         with mock.patch(
-            "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
             return_value=otlp_exporter,
         ):
             self.assertEqual(
@@ -228,7 +228,7 @@ class TraceExporterTest(unittest.TestCase):
         }
         with (
             mock.patch(
-                "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+                "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
                 side_effect=ValueError("bad URL"),
             ),
             self.assertRaisesRegex(tracing.CovalTraceError, "bad URL"),
@@ -240,7 +240,7 @@ class TraceExporterTest(unittest.TestCase):
             trace_export.SpanExportResult.SUCCESS
         )
         with mock.patch(
-            "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
             return_value=otlp_exporter,
         ):
             self.assertEqual(collector.upload(**upload_options), 1)
@@ -282,7 +282,7 @@ class TraceExporterTest(unittest.TestCase):
             trace_export.SpanExportResult.SUCCESS
         )
         with mock.patch(
-            "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
             return_value=otlp_exporter,
         ):
             self.assertEqual(
@@ -340,7 +340,7 @@ class TraceExporterTest(unittest.TestCase):
         otlp_exporter = mock.Mock()
         otlp_exporter.export.side_effect = export_during_upload
         with mock.patch(
-            "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
             return_value=otlp_exporter,
         ):
             with self.assertRaisesRegex(
@@ -373,7 +373,9 @@ class TraceExporterTest(unittest.TestCase):
         collector.export(
             [make_span(trace_id=retained_trace_id, simulation_id="retained")]
         )
-        with mock.patch("coval_voice.tracing.time.time_ns", return_value=10):
+        with mock.patch(
+            "coval_agent_sdk.tracing.time.time_ns", return_value=10
+        ):
             self.assertEqual(
                 collector.export([make_span(trace_id=rejected_trace_id)]),
                 trace_export.SpanExportResult.FAILURE,
@@ -388,7 +390,7 @@ class TraceExporterTest(unittest.TestCase):
             trace_export.SpanExportResult.SUCCESS
         )
         with mock.patch(
-            "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
             return_value=otlp_exporter,
         ):
             self.assertEqual(
@@ -448,7 +450,7 @@ class TraceExporterTest(unittest.TestCase):
             trace_export.SpanExportResult.SUCCESS
         )
         with mock.patch(
-            "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
+            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
             return_value=otlp_exporter,
         ):
             self.assertEqual(

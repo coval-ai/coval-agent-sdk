@@ -26,7 +26,7 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 
 - Follow the Google-based conventions in `docs/python-style.md`; use four spaces, double quotes, an 80-column target, and the pinned Ruff configuration.
 - Import absolute owning modules inside the SDK; keep symbol imports limited to typing helpers and the explicit root API facade.
-- Keep `src/coval_voice/__init__.py` limited to its docstring, explicit public imports, and literal `__all__`; `scripts/check_architecture.py` checks this boundary.
+- Keep `src/coval_agent_sdk/__init__.py` limited to its docstring, explicit public imports, and literal `__all__`; `scripts/check_architecture.py` checks this boundary.
 - Annotate production parameters and return values, and keep `Any` at validated JSON or dynamic adapter boundaries.
 - Write Google-style docstrings for public APIs, including meaningful `Args:`, `Returns:`, `Yields:`, `Raises:`, and `Attributes:` sections where applicable.
 - Split code by responsibility and state ownership rather than creating generic utility modules or forwarding layers to satisfy a size target.
@@ -34,7 +34,8 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 
 ## Package and API
 
-- Use `coval-agent-sdk` as the distribution name, `coval_voice` as the Python package, and the entry points documented in `README.md`.
+- Use `coval-agent-sdk` as the distribution name, `coval_agent_sdk` as the Python package, and the entry points documented in `README.md`.
+- Treat this unreleased SDK as a clean slate; update consumers alongside API changes without compatibility aliases or deprecation paths.
 - Keep internal orchestration out of public client reexports; expose a definition through the root facade only when it is part of the reviewed developer API.
 - Keep provider frameworks, backend imports, AWS configuration, and consumer source paths outside the core SDK.
 - Add a dependency only for a concrete runtime or development requirement and keep its supported Python range consistent with `pyproject.toml`.

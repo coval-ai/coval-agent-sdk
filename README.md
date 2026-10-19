@@ -2,7 +2,7 @@
 
 Connect Python voice agents to Coval simulations through an authenticated outbound WebSocket. Your process runs the agent; Coval supplies the simulated caller, records the conversation, and evaluates the result. The agent does not need a public URL or a listening port.
 
-The distribution is `coval-agent-sdk`, the Python package is `coval_voice`, and the CLI is `coval-tunnel`. Requires Python 3.10 or newer. This SDK is in pre-release development; install from a checkout while the API is being designed.
+The distribution is `coval-agent-sdk`, the Python package is `coval_agent_sdk`, and the CLI is `coval-agent`. Requires Python 3.10 or newer. This SDK is in pre-release development; install from a checkout while the API is being designed.
 
 ## Install from source
 
@@ -17,7 +17,7 @@ For SDK development, use the editable setup instead:
 
 ```sh
 scripts/install
-.venv/bin/python -m coval_voice --help
+.venv/bin/python -m coval_agent_sdk --help
 ```
 
 See [local development](docs/local-development.md) for building a wheel and installing it into another project. A source install does not publish a package.
@@ -30,16 +30,16 @@ Select an existing Coval agent, persona, and test set in your workspace. Set `CO
 import asyncio
 import os
 
-import coval_voice
+import coval_agent_sdk
 import my_agent
 
 
 async def main() -> None:
-    client = coval_voice.CovalVoiceClient(
+    client = coval_agent_sdk.CovalVoiceClient(
         api_key=os.environ["COVAL_API_KEY"],
         workspace_id=os.environ["COVAL_WORKSPACE_ID"],
     )
-    config = coval_voice.RunConfig(
+    config = coval_agent_sdk.RunConfig(
         agent_id=os.environ["COVAL_AGENT_ID"],
         persona_id=os.environ["COVAL_PERSONA_ID"],
         test_set_id=os.environ["COVAL_TEST_SET_ID"],
@@ -77,14 +77,14 @@ Read [runtime contracts](docs/runtime.md) before implementing an adapter. They c
 The CLI adapter module exposes a zero-argument `create_agent()` factory. This differs from the Python client's simulation-ID factory and is a current design limitation.
 
 ```sh
-coval-tunnel --workspace-id WORKSPACE_ID --agent-module my_agent \
+coval-agent --workspace-id WORKSPACE_ID --agent-module my_agent \
   run --agent-id AGENT_ID --persona-id PERSONA_ID --test-set-id TEST_SET_ID
 
-coval-tunnel --workspace-id WORKSPACE_ID --agent-module my_agent \
+coval-agent --workspace-id WORKSPACE_ID --agent-module my_agent \
   connect SIMULATION_ID
 ```
 
-`python -m coval_voice` accepts the same arguments. The CLI reads `COVAL_API_KEY`, `COVAL_WORKSPACE_ID`, and `COVAL_API_BASE_URL` from the environment; explicit workspace/base-URL flags take precedence. Use `run --run-timeout-seconds` to change the batch deadline, which defaults to one hour and includes queued conversations and evaluation postprocessing.
+`python -m coval_agent_sdk` accepts the same arguments. The CLI reads `COVAL_API_KEY`, `COVAL_WORKSPACE_ID`, and `COVAL_API_BASE_URL` from the environment; explicit workspace/base-URL flags take precedence. Use `run --run-timeout-seconds` to change the batch deadline, which defaults to one hour and includes queued conversations and evaluation postprocessing.
 
 ## Optional traces
 

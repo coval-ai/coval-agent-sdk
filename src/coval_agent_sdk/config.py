@@ -5,7 +5,7 @@ from __future__ import annotations
 import dataclasses
 import math
 
-from coval_voice import _defaults
+from coval_agent_sdk import _defaults
 
 
 @dataclasses.dataclass(frozen=True)

@@ -10,8 +10,8 @@ from urllib import error
 from urllib import parse
 from urllib import request
 
-from coval_voice import _defaults
-from coval_voice import errors
+from coval_agent_sdk import _defaults
+from coval_agent_sdk import errors
 
 
 class CovalApi:

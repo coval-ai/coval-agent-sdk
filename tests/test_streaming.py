@@ -15,14 +15,14 @@ import pytest
 from websockets import exceptions
 from websockets import frames
 
-import coval_voice
-from coval_voice import _audio
-from coval_voice import _cli
-from coval_voice import _connection
-from coval_voice import _defaults
-from coval_voice import _http
-from coval_voice import _session
-from coval_voice import tracing
+import coval_agent_sdk
+from coval_agent_sdk import _audio
+from coval_agent_sdk import _cli
+from coval_agent_sdk import _connection
+from coval_agent_sdk import _defaults
+from coval_agent_sdk import _http
+from coval_agent_sdk import _session
+from coval_agent_sdk import tracing
 
 READY = json.dumps(
     {
@@ -38,7 +38,7 @@ GREETING = b"\x01\x00" * 320
 REPLY = b"\x02\x00" * 320
 
 
-class StreamingAgent(coval_voice.StreamingVoiceAgent):
+class StreamingAgent(coval_agent_sdk.StreamingVoiceAgent):
     def __init__(self):
         self.output = asyncio.Queue(maxsize=4)
         self.closed = False
@@ -111,7 +111,7 @@ async def test_greeting_and_reply_stream_during_input_silence_and_close(
         "open_voice_connection",
         mock.AsyncMock(return_value=socket),
     )
-    voice = coval_voice.CovalVoiceClient(api_key="synthetic-key")
+    voice = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
     session = asyncio.create_task(
         voice.connect("simulation-a", lambda _: agent)
     )
@@ -176,7 +176,7 @@ async def test_back_to_back_stream_chunks_retain_the_audio_pacing_budget(
         mock.AsyncMock(return_value=socket),
     )
     session = asyncio.create_task(
-        coval_voice.CovalVoiceClient(api_key="key").connect(
+        coval_agent_sdk.CovalVoiceClient(api_key="key").connect(
             "simulation-a", lambda _: agent
         )
     )
@@ -221,9 +221,11 @@ async def test_output_failure_wakes_the_receiver_and_closes_resources(
         "odd": "even-length PCM16",
         "oversize": "exceeds the 2 MiB limit",
     }[failure]
-    with pytest.raises((RuntimeError, coval_voice.TunnelError), match=message):
+    with pytest.raises(
+        (RuntimeError, coval_agent_sdk.TunnelError), match=message
+    ):
         await asyncio.wait_for(
-            coval_voice.CovalVoiceClient(api_key="key").connect(
+            coval_agent_sdk.CovalVoiceClient(api_key="key").connect(
                 "simulation-a", lambda _: agent
             ),
             1,
@@ -246,7 +248,7 @@ async def test_cancellation_stops_a_blocked_audio_stream_and_closes_the_agent(
         mock.AsyncMock(return_value=socket),
     )
     session = asyncio.create_task(
-        coval_voice.CovalVoiceClient(api_key="key").connect(
+        coval_agent_sdk.CovalVoiceClient(api_key="key").connect(
             "simulation-a", lambda _: agent
         )
     )
@@ -270,7 +272,7 @@ async def test_custom_workspace_is_forwarded_on_reads_and_run_launches(
         return io.BytesIO(b'{"ok": true}')
 
     monkeypatch.setattr(_http.request, "urlopen", urlopen)
-    voice = coval_voice.CovalVoiceClient(
+    voice = coval_agent_sdk.CovalVoiceClient(
         api_key="synthetic-key", workspace_id="workspace-a"
     )
     await voice.api.get("simulations/simulation-a/connect")
@@ -288,8 +290,10 @@ def test_public_package_imports_its_own_tracing_module(tmp_path):
 import sys
 import types
 sys.modules['tracing'] = types.ModuleType('consumer_owned_tracing')
-import coval_voice
-assert coval_voice.CovalTraceExporter.__module__ == 'coval_voice.tracing'
+import coval_agent_sdk
+assert (
+    coval_agent_sdk.CovalTraceExporter.__module__ == 'coval_agent_sdk.tracing'
+)
 """
     subprocess.run(  # noqa: S603 - Fixed interpreter and source, no user input.
         [sys.executable, "-I", "-c", code], cwd=tmp_path, check=True
@@ -301,7 +305,7 @@ def test_cli_rejects_an_invalid_adapter_before_connecting(monkeypatch):
     module.create_agent = lambda: object()
     monkeypatch.setitem(sys.modules, "synthetic_agent", module)
     with pytest.raises(
-        coval_voice.TunnelError, match=r"on_ready.*on_audio.*close"
+        coval_agent_sdk.TunnelError, match=r"on_ready.*on_audio.*close"
     ):
         _cli.load_agent("synthetic_agent")
     module.create_agent = StreamingAgent
@@ -315,7 +319,7 @@ async def test_missing_terminal_frame_confirms_completion_and_uploads(
 ):
     socket = Socket()
     socket.messages.put_nowait(READY)
-    exporter = coval_voice.CovalTraceExporter()
+    exporter = coval_agent_sdk.CovalTraceExporter()
     provider = sdk_trace.TracerProvider()
     provider.add_span_processor(trace_export.SimpleSpanProcessor(exporter))
     span = provider.get_tracer(__name__).start_span(
@@ -351,7 +355,7 @@ async def test_missing_terminal_frame_confirms_completion_and_uploads(
             await super().close()
 
     agent = TracedAgent()
-    voice = coval_voice.CovalVoiceClient(
+    voice = coval_agent_sdk.CovalVoiceClient(
         api_key="synthetic-key",
         workspace_id="workspace-a",
         trace_exporter=exporter,
@@ -439,7 +443,7 @@ async def test_socket_failure_is_preserved_without_authoritative_completion(
     agent = StreamingAgent()
     exporter = mock.Mock()
     session = asyncio.create_task(
-        coval_voice.CovalVoiceClient(
+        coval_agent_sdk.CovalVoiceClient(
             api_key="key", trace_exporter=exporter
         ).connect("simulation-a", lambda _: agent)
     )
@@ -471,7 +475,7 @@ async def test_explicit_relay_failures_do_not_query_for_success(
         "open_voice_connection",
         mock.AsyncMock(return_value=socket),
     )
-    voice = coval_voice.CovalVoiceClient(api_key="key")
+    voice = coval_agent_sdk.CovalVoiceClient(api_key="key")
     read = mock.AsyncMock(return_value={"simulation": {"status": "COMPLETED"}})
     monkeypatch.setattr(voice.api, "get", read)
     agent = StreamingAgent()
@@ -486,7 +490,7 @@ async def test_explicit_relay_failures_do_not_query_for_success(
             )
         )
         with pytest.raises(
-            (exceptions.ConnectionClosedError, coval_voice.TunnelError)
+            (exceptions.ConnectionClosedError, coval_agent_sdk.TunnelError)
         ):
             await asyncio.wait_for(session, 2)
         read.assert_not_awaited()
@@ -508,7 +512,7 @@ async def test_close_before_ready_cannot_claim_completion(
         "open_voice_connection",
         mock.AsyncMock(return_value=socket),
     )
-    voice = coval_voice.CovalVoiceClient(api_key="key")
+    voice = coval_agent_sdk.CovalVoiceClient(api_key="key")
     read = mock.AsyncMock(return_value={"simulation": {"status": "COMPLETED"}})
     monkeypatch.setattr(voice.api, "get", read)
     agent = StreamingAgent()
@@ -540,7 +544,9 @@ async def test_cancel_during_verification_closes_and_discards(
         await asyncio.Event().wait()
 
     exporter = mock.Mock()
-    voice = coval_voice.CovalVoiceClient(api_key="key", trace_exporter=exporter)
+    voice = coval_agent_sdk.CovalVoiceClient(
+        api_key="key", trace_exporter=exporter
+    )
     monkeypatch.setattr(voice.api, "get", read)
     agent = StreamingAgent()
     session = asyncio.create_task(

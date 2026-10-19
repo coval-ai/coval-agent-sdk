@@ -14,7 +14,7 @@ _CHECKER = (
 
 
 def _check(tmp_path, module, source):
-    package = tmp_path / "coval_voice"
+    package = tmp_path / "coval_agent_sdk"
     package.mkdir()
     (package / f"{module}.py").write_text(source)
     return subprocess.run(  # noqa: S603 - Fixed interpreter and local checker.
@@ -28,13 +28,13 @@ def _check(tmp_path, module, source):
 @pytest.mark.parametrize(
     ("module", "source"),
     [
-        ("_session", "from coval_voice import _connection\n"),
-        ("config", "from coval_voice import _defaults\n"),
-        ("__main__", "from coval_voice import _cli\n"),
+        ("_session", "from coval_agent_sdk import _connection\n"),
+        ("config", "from coval_agent_sdk import _defaults\n"),
+        ("__main__", "from coval_agent_sdk import _cli\n"),
         (
             "__init__",
             (
-                "from coval_voice.client import CovalVoiceClient\n"
+                "from coval_agent_sdk.client import CovalVoiceClient\n"
                 '__all__ = ["CovalVoiceClient"]\n'
             ),
         ),
@@ -50,15 +50,15 @@ def test_architecture_accepts_owning_modules_and_explicit_exports(
 @pytest.mark.parametrize(
     ("module", "source", "diagnostic"),
     [
-        ("_session", "from coval_voice import client\n", "must not depend"),
+        ("_session", "from coval_agent_sdk import client\n", "must not depend"),
         (
             "client",
-            "from coval_voice._session import run_session\n",
+            "from coval_agent_sdk._session import run_session\n",
             "owning module",
         ),
         (
             "_session",
-            "from coval_voice._connection import wait_for_offer\n",
+            "from coval_agent_sdk._connection import wait_for_offer\n",
             "owning module",
         ),
         ("_session", "from . import _connection\n", "absolute imports"),
@@ -67,7 +67,7 @@ def test_architecture_accepts_owning_modules_and_explicit_exports(
         ("__init__", "initialize()\n", "only declare public exports"),
         (
             "__init__",
-            "from coval_voice.client import CovalVoiceClient\n",
+            "from coval_agent_sdk.client import CovalVoiceClient\n",
             "exactly match",
         ),
         ("__init__", "__all__ = make_exports()\n", "only declare"),

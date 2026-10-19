@@ -4,7 +4,7 @@ This repository follows the [Google Python Style Guide](https://google.github.io
 
 ## Organization
 
-Production code lives under `src/coval_voice/`, tests under `tests/`, and development commands under `scripts/`. [Architecture](architecture.md) defines each module's responsibility and dependency direction. Keep provider integrations outside the core package.
+Production code lives under `src/coval_agent_sdk/`, tests under `tests/`, and development commands under `scripts/`. [Architecture](architecture.md) defines each module's responsibility and dependency direction. Keep provider integrations outside the core package.
 
 Split code when responsibility, state ownership, or dependencies differ. Keep code that changes for the same reason together. Review functions over roughly 40 lines and modules over roughly 400 lines for cohesive extractions; these are review signals, not targets to satisfy with forwarding functions. Keep a session's cleanup visible alongside its ownership rules.
 
@@ -15,12 +15,12 @@ Ruff caps production function cyclomatic complexity at 15. Review the owning ope
 Use absolute imports and module-qualified references:
 
 ```python
-from coval_voice import config
+from coval_agent_sdk import config
 
 settings = config.RunConfig(agent_id="a", persona_id="p", test_set_id="t")
 ```
 
-Import modules, not their classes or functions. Symbols from `typing`, `typing_extensions`, and `collections.abc` are allowed, matching Google's typing exceptions. The root `coval_voice/__init__.py` is the deliberate public-facade exception described below.
+Import modules, not their classes or functions. Symbols from `typing`, `typing_extensions`, and `collections.abc` are allowed, matching Google's typing exceptions. The root `coval_agent_sdk/__init__.py` is the deliberate public-facade exception described below.
 
 Use one import per line, with separate standard-library, third-party, and first-party groups sorted lexicographically within each group. Ruff maintains that order. Do not use wildcard or relative imports, or move an import inside a function to conceal a cycle. Use `from __future__ import annotations` in production modules with annotations; type-only imports must not hide a runtime dependency.
 
@@ -28,7 +28,7 @@ Internal modules import the owner of a definition, not the root facade. The arch
 
 ## Initializers and public exports
 
-`src/coval_voice/__init__.py` contains only its module docstring, explicit supported public imports, and a literal `__all__`. It performs no I/O, client construction, configuration, registration, or logging setup. The architecture check verifies that its imports and `__all__` agree.
+`src/coval_agent_sdk/__init__.py` contains only its module docstring, explicit supported public imports, and a literal `__all__`. It performs no I/O, client construction, configuration, registration, or logging setup. The architecture check verifies that its imports and `__all__` agree.
 
 A new subpackage starts with a docstring-only initializer unless it has a reviewed public facade. Put executable package startup in `__main__.py`. Do not expose internal helpers or add alternate import paths merely to shorten a reference. Update the public API test and documentation when an export intentionally changes.
 

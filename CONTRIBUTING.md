@@ -10,7 +10,7 @@ Use Python 3.12 and [uv](https://docs.astral.sh/uv/) for development. The packag
 git clone https://github.com/coval-ai/coval-agent-sdk.git
 cd coval-agent-sdk
 scripts/install
-.venv/bin/python -m coval_voice --help
+.venv/bin/python -m coval_agent_sdk --help
 ```
 
 The editable installation makes source changes available in `.venv`. Installation, CLI help, static checks, and tests do not need Coval or model-provider credentials. Use `PYTHON_VERSION=3.10 scripts/install` in a fresh checkout to create a development environment for another supported interpreter.

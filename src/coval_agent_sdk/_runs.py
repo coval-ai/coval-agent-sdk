@@ -8,13 +8,13 @@ from typing import Any
 from urllib import error
 from urllib import parse
 
-from coval_voice import _defaults
-from coval_voice import _http
-from coval_voice import _session
-from coval_voice import agent
-from coval_voice import config as run_config
-from coval_voice import errors
-from coval_voice import tracing
+from coval_agent_sdk import _defaults
+from coval_agent_sdk import _http
+from coval_agent_sdk import _session
+from coval_agent_sdk import agent
+from coval_agent_sdk import config as run_config
+from coval_agent_sdk import errors
+from coval_agent_sdk import tracing
 
 
 async def _get_monitoring_resource(

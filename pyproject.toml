@@ -45,18 +45,18 @@ dev = [
 ]
 
 [project.scripts]
-coval-tunnel = "coval_voice._cli:cli"
+coval-agent = "coval_agent_sdk._cli:cli"
 
 [tool.setuptools]
 package-dir = {"" = "src"}
 
 [tool.setuptools.packages.find]
 where = ["src"]
-include = ["coval_voice*"]
+include = ["coval_agent_sdk*"]
 namespaces = false
 
 [tool.setuptools.package-data]
-coval_voice = ["py.typed"]
+coval_agent_sdk = ["py.typed"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

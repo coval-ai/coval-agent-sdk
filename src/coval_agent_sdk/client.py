@@ -2,13 +2,13 @@
 
 from __future__ import annotations
 
-from coval_voice import _defaults
-from coval_voice import _http
-from coval_voice import _runs
-from coval_voice import _session
-from coval_voice import agent
-from coval_voice import config
-from coval_voice import tracing
+from coval_agent_sdk import _defaults
+from coval_agent_sdk import _http
+from coval_agent_sdk import _runs
+from coval_agent_sdk import _session
+from coval_agent_sdk import agent
+from coval_agent_sdk import config
+from coval_agent_sdk import tracing
 
 
 class CovalVoiceClient:

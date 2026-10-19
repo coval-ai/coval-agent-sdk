@@ -65,7 +65,7 @@ def check_package(package: pathlib.Path) -> list[str]:
     """Return violations of initializer, import, and module ownership rules.
 
     Args:
-        package: Directory containing the production coval_voice modules.
+        package: Directory containing the production coval_agent_sdk modules.
 
     Returns:
         Diagnostics with module paths and one-based source lines.
@@ -99,10 +99,10 @@ def _check_import(
         if node.level:
             messages.append("use absolute imports")
         module = node.module or ""
-        if module == "coval_voice":
+        if module == "coval_agent_sdk":
             targets = [item.name for item in node.names]
-        elif module.startswith("coval_voice."):
-            targets = [module.removeprefix("coval_voice.")]
+        elif module.startswith("coval_agent_sdk."):
+            targets = [module.removeprefix("coval_agent_sdk.")]
             if owner not in _FACADES:
                 messages.append("import the owning module, not its symbols")
         else:
@@ -111,18 +111,18 @@ def _check_import(
     else:
         roots = [item.name.split(".")[0] for item in node.names]
         targets = [
-            item.name.removeprefix("coval_voice.")
+            item.name.removeprefix("coval_agent_sdk.")
             for item in node.names
-            if item.name.startswith("coval_voice.")
+            if item.name.startswith("coval_agent_sdk.")
         ]
-        if any(item.name == "coval_voice" for item in node.names):
+        if any(item.name == "coval_agent_sdk" for item in node.names):
             messages.append("internal code must import an owning module")
     for target in targets:
         if target not in _DEPENDENCIES[owner]:
             messages.append(f"{owner} must not depend on {target}")
     for root in roots:
         if root not in (
-            sys.stdlib_module_names | _EXTERNAL_ROOTS | {"coval_voice"}
+            sys.stdlib_module_names | _EXTERNAL_ROOTS | {"coval_agent_sdk"}
         ):
             messages.append(f"undeclared production dependency: {root}")
     return messages
@@ -181,7 +181,9 @@ def main(arguments: Sequence[str]) -> int:
     package = (
         pathlib.Path(arguments[0])
         if arguments
-        else pathlib.Path(__file__).resolve().parents[1] / "src" / "coval_voice"
+        else pathlib.Path(__file__).resolve().parents[1]
+        / "src"
+        / "coval_agent_sdk"
     )
     if not package.is_dir():
         print(f"Missing package: {package}", file=sys.stderr)
