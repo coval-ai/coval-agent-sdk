@@ -1,8 +1,8 @@
 # coval-agent-sdk
 
-A standalone Python Voice Agent SDK developed in the private `coval-ai/coval-agent-sdk` repository. The distribution remains `coval-voice-tunnel==0.2.0a1` and imports remain `coval_voice` while the developer API is being designed. No package-registry release is published by this project.
+A standalone Python Voice Agent SDK developed in the private `coval-ai/coval-agent-sdk` repository. The installable distribution is `coval-agent-sdk==0.2.0a1`; Python imports remain `coval_voice` while the developer API is being designed. No package-registry release is published by this project.
 
-Connect a Python voice agent outbound to Coval simulations using an organization/workspace API key. No listening port, public agent URL, AWS credentials, or backend imports are required on the agent machine. The distribution is `coval-voice-tunnel`; the public Python namespace is `coval_voice`. Requires Python 3.10+ and WebSockets 15.x.
+Connect a Python voice agent outbound to Coval simulations using an organization/workspace API key. No listening port, public agent URL, AWS credentials, or backend imports are required on the agent machine. The distribution is `coval-agent-sdk`; the public Python namespace is `coval_voice`. Requires Python 3.10+ and WebSockets 15.x.
 
 ## Develop locally
 

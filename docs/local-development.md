@@ -16,7 +16,7 @@ Run `scripts/build` when a consumer needs an artifact. It writes the wheel and s
 
 ## Agent Playground Integration
 
-The existing consumer is `agents/pipecat-sdk` in [agent-playground PR #93](https://github.com/coval-ai/agent-playground/pull/93). Its `COVAL_VOICE_SDK_WHEEL` override can install a locally built wheel without a registry. The current distribution name and version are retained so this mechanism remains compatible. The PR's default install still resolves a package-index version; it has not been rewritten as part of extraction.
+The existing consumer is `agents/pipecat-sdk` in [agent-playground PR #93](https://github.com/coval-ai/agent-playground/pull/93). Its `COVAL_VOICE_SDK_WHEEL` override can install a locally built wheel without a registry. The consumer dependency and install hook use `coval-agent-sdk==0.2.0a1`, matching the standalone wheel. The PR's default install still resolves a package-index version; it has not been rewritten as part of extraction.
 
 Once the developer API settles, update the consumer dependency and verify its deterministic pipeline tests against the standalone wheel. Repeat the bounded hosted canary when runtime contracts change, recording source and wheel identities, saved audio/transcript, metric outcomes, cleanup, and optional trace upload. The extracted implementation has already been exercised through a standalone wheel; that evidence does not verify future API changes. Live acceptance and outstanding provider, relay, and evaluation limits are tracked in COVAL-7087.
 

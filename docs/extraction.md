@@ -6,6 +6,6 @@ The `coval_voice` package, its type marker, both compatibility modules, all thre
 
 The backend publishing workflow is deliberately excluded. Its `RELEASING.md` is replaced by local installation/build instructions. The standalone source is hosted in the private `coval-ai/coval-agent-sdk` repository, with a README-only initial commit and a draft implementation PR. No package release or publishing configuration is included. The original backend and playground branches are preserved while design work proceeds here.
 
-The repository name is `coval-agent-sdk`; the existing distribution name is `coval-voice-tunnel`; Python imports use `coval_voice`. These are different names with different consumers. Consolidating the developer-facing naming is a design question rather than an incidental extraction edit.
+The repository and installable distribution are named `coval-agent-sdk`. The original extraction used the experimental distribution name `coval-voice-tunnel`; original source paths in the manifest retain that provenance. Python imports remain `coval_voice`, and compatibility imports and the `coval-tunnel` CLI retain their current names.
 
 Covering work: [COVAL-7086 — Package the Python Voice Agent SDK for streaming agents](https://linear.app/coval/issue/COVAL-7086/package-the-python-voice-agent-sdk-for-streaming-agents). Playground integration remains under COVAL-7087.

@@ -12,7 +12,17 @@ wheel_python="$validation_root/venv/bin/python"
 uv pip install --python "$wheel_python" "$validation_root"/dist/*.whl \
   'pytest>=8,<10' 'pytest-asyncio>=0.24,<2'
 cd "$validation_root"
-env -u PYTHONPATH "$wheel_python" -c 'import coval_voice, sys; from pathlib import Path; assert Path(coval_voice.__file__).is_relative_to(Path(sys.prefix)); print("Import resolved to the isolated wheel installation.")'
+env -u PYTHONPATH "$wheel_python" - <<'PYTHON'
+from importlib.metadata import distribution
+from pathlib import Path
+import sys
+import coval_voice
+
+package = distribution("coval-agent-sdk")
+assert package.metadata["Name"] == "coval-agent-sdk"
+assert Path(coval_voice.__file__).is_relative_to(Path(sys.prefix))
+print("Installed coval-agent-sdk; imports resolve to the isolated wheel.")
+PYTHON
 env -u PYTHONPATH "$wheel_python" -m pytest --import-mode=importlib \
   "$project_root/tests/test_client.py" \
   "$project_root/tests/test_streaming.py" \

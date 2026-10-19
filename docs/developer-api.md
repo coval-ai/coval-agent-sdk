@@ -68,7 +68,7 @@ The proposed result describes persisted execution outcomes and identifiers. Metr
 
 ### 3. Make Setup and Failures Legible
 
-Use the standalone project's name consistently in documentation and make an explicit naming decision for the eventual distribution, import namespace, and console command. Avoid adding a second client class just to shorten its name. Make the selected environment and workspace clear at the entry point; do not silently change the current production default during extraction.
+The installable distribution name is `coval-agent-sdk`. Python imports remain `coval_voice` and the console command remains `coval-tunnel`; any changes to those interfaces are separate design decisions. Avoid adding a second client class just to shorten its name. Make the selected environment and workspace clear at the entry point; do not silently change the current production default during extraction.
 
 Separate fixture/configuration mistakes, authentication failures, provider errors, transport/backpressure failures, timeouts, and telemetry warnings in the developer-facing result/error contract. Keep run and simulation IDs available for debugging. Never include credentials or one-use relay offers in result objects or normal diagnostics.
 
