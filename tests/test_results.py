@@ -158,7 +158,7 @@ async def test_connect_returns_trace_delivery_without_console_warnings(
     assert result.status == "COMPLETED"
     assert (result.received_audio_bytes, result.sent_audio_bytes) == (640, 640)
     if trace_failure:
-        assert result.trace.uploaded_spans == 0
+        assert result.trace.uploaded_spans is None
         assert result.trace.error
         assert (
             "flush" if trace_failure == "flush" else "upload rejected"

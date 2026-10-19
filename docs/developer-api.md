@@ -12,7 +12,7 @@ The SDK is a Python library with no CLI, module execution entry point, internal 
 
 `run()` returns an immutable `RunResult` with `run_id`, the last hosted `status`, and `conversations: tuple[SessionResult, ...]`. Successful completion requires the hosted run to be `COMPLETED` and every eligible conversation to have attached and finished locally. Execution completion does not mean quality criteria passed.
 
-`connect()` returns an immutable `SessionResult` with `simulation_id`, local voice `status`, received/sent PCM byte counts, and optional `trace: TraceResult`. Voice completion does not imply hosted evaluation completion. A trace result reports `uploaded_spans` and an optional flush/upload `error`; disabled tracing is represented by `None`. Telemetry failures do not turn a completed conversation into a failed voice session.
+`connect()` returns an immutable `SessionResult` with `simulation_id`, local voice `status`, received/sent PCM byte counts, and optional `trace: TraceResult`. Voice completion does not imply hosted evaluation completion. A trace result reports `uploaded_spans` (unknown/`None` after a failure) and an optional flush/upload `error`; disabled tracing is represented by `None`. Telemetry failures do not turn a completed conversation into a failed voice session.
 
 After run creation, an SDK run failure raises `RunError`. Its `result` carries the run ID, last observed monitoring status (`None` before the first status response), and completed local conversations after cleanup. The hosted status may still indicate work in progress; the SDK does not invent a hosted cancellation outcome. Failures before run creation and cancellation propagate without fabricating a run result.
 

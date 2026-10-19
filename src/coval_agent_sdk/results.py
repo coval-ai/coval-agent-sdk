@@ -11,12 +11,13 @@ class TraceResult:
     """Describe optional telemetry delivery independently of voice completion.
 
     Attributes:
-        uploaded_spans: Number of spans delivered to Coval.
+        uploaded_spans: Number of spans delivered by a successful upload, or
+            None when a failure leaves the delivered count unknown.
         error: Upload or flush failure, or None on success. Retained exporter
             buffers may be retried without repeating the conversation.
     """
 
-    uploaded_spans: int = 0
+    uploaded_spans: int | None = None
     error: str | None = None
 
 
