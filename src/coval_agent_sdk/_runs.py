@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import time
 from typing import Any
 from urllib import error
@@ -14,6 +15,7 @@ from coval_agent_sdk import _session
 from coval_agent_sdk import agent
 from coval_agent_sdk import config as run_config
 from coval_agent_sdk import errors
+from coval_agent_sdk import results
 from coval_agent_sdk import tracing
 
 
@@ -59,24 +61,69 @@ async def _get_monitoring_resource(
     ) from last_error
 
 
+@dataclasses.dataclass
+class _RunState:
+    """Retain the hosted identity and last observed status through failure."""
+
+    run_id: str | None = None
+    status: str | None = None
+
+    def observe_status(self, status: object) -> None:
+        """Validate and retain the status supplied by the hosted API.
+
+        Args:
+            status: Untrusted status field from a monitoring response.
+
+        Raises:
+            errors.TunnelError: The response has no string status.
+        """
+        if not isinstance(status, str):
+            raise errors.TunnelError("Run monitoring returned no status.")
+        self.status = status
+
+
 async def launch_and_run(
     api: _http.CovalApi,
     config: run_config.RunConfig,
     agent_factory: agent.AgentFactory,
     trace_exporter: tracing.CovalTraceExporter | None = None,
-) -> None:
-    """Launch a run and attach one local agent per discovered simulation."""
-    active: dict[str, asyncio.Task[None]] = {}
+) -> results.RunResult:
+    """Launch once and retain completed outcomes through run failures."""
+    active: dict[str, asyncio.Task[results.SessionResult]] = {}
+    state = _RunState()
     try:
-        await _launch_and_run(
-            api, config, agent_factory, trace_exporter, active
-        )
-    finally:
-        unfinished = [task for task in active.values() if not task.done()]
-        for task in unfinished:
-            task.cancel()
-        if unfinished:
-            await asyncio.gather(*unfinished, return_exceptions=True)
+        try:
+            return await _launch_and_run(
+                api, config, agent_factory, trace_exporter, active, state
+            )
+        finally:
+            unfinished = [task for task in active.values() if not task.done()]
+            for task in unfinished:
+                task.cancel()
+            if unfinished:
+                await asyncio.gather(*unfinished, return_exceptions=True)
+    except errors.TunnelError as exception:
+        if state.run_id is None:
+            raise
+        raise errors.RunError(
+            str(exception),
+            result=results.RunResult(
+                run_id=state.run_id,
+                status=state.status,
+                conversations=_completed_sessions(active),
+            ),
+        ) from exception
+
+
+def _completed_sessions(
+    active: dict[str, asyncio.Task[results.SessionResult]],
+) -> tuple[results.SessionResult, ...]:
+    """Collect successful local outcomes without consuming failed tasks."""
+    return tuple(
+        task.result()
+        for task in active.values()
+        if task.done() and not task.cancelled() and task.exception() is None
+    )
 
 
 async def _launch_and_run(
@@ -84,8 +131,9 @@ async def _launch_and_run(
     config: run_config.RunConfig,
     agent_factory: agent.AgentFactory,
     trace_exporter: tracing.CovalTraceExporter | None,
-    active: dict[str, asyncio.Task[None]],
-) -> None:
+    active: dict[str, asyncio.Task[results.SessionResult]],
+    state: _RunState,
+) -> results.RunResult:
     """Monitor the launched run while the caller owns task cleanup."""
     launch_payload: dict[str, Any] = {
         "agent_id": config.agent_id,
@@ -103,7 +151,7 @@ async def _launch_and_run(
     run_id = launch_run.get("run_id")
     if not isinstance(run_id, str) or not run_id:
         raise errors.TunnelError("POST /runs returned no run.run_id.")
-    print(f"Launched run {run_id}.", flush=True)
+    state.run_id = run_id
     seen: set[str] = set()
     deadline = time.monotonic() + config.run_timeout_seconds
     run_status = "PENDING"
@@ -123,7 +171,8 @@ async def _launch_and_run(
             api, f"runs/{parse.quote(run_id, safe='')}", run_deadline=deadline
         )
         run_resource: dict[str, Any] = run_response.get("run") or {}
-        run_status = run_resource.get("status")
+        state.observe_status(run_resource.get("status"))
+        run_status = state.status
         if run_status in _defaults.TERMINAL_RUN_STATUSES and all(
             task.done() for task in active.values()
         ):
@@ -156,18 +205,16 @@ async def _launch_and_run(
         raise errors.TunnelError(
             "Voice sessions failed: " + "; ".join(failures)
         )
-    print(
-        (
-            f"Run {run_id} finished with status "
-            f"{run_status} and {len(active)} voice "
-            f"session(s)."
-        ),
-        flush=True,
-    )
     if run_status != "COMPLETED":
         raise errors.TunnelError(
             f"Run {run_id} finished with status {run_status}."
         )
+
+    return results.RunResult(
+        run_id=run_id,
+        status=run_status,
+        conversations=_completed_sessions(active),
+    )
 
 
 async def _attach_simulations(
@@ -177,7 +224,7 @@ async def _attach_simulations(
     agent_factory: agent.AgentFactory,
     trace_exporter: tracing.CovalTraceExporter | None,
     seen: set[str],
-    active: dict[str, asyncio.Task[None]],
+    active: dict[str, asyncio.Task[results.SessionResult]],
 ) -> None:
     """Discover every page and record each fresh task before monitoring resumes.
 
@@ -208,7 +255,6 @@ async def _attach_simulations(
                     api, simulation_id, agent_factory, trace_exporter
                 )
             )
-            print(f"[{simulation_id}] Discovered conversation.", flush=True)
         page_token = listing.get("next_page_token")
         if not page_token:
             break

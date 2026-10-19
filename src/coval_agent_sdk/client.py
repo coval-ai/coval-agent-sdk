@@ -8,6 +8,7 @@ from coval_agent_sdk import _runs
 from coval_agent_sdk import _session
 from coval_agent_sdk import agent
 from coval_agent_sdk import config
+from coval_agent_sdk import results
 from coval_agent_sdk import tracing
 
 
@@ -54,7 +55,7 @@ class CovalVoiceClient:
 
     async def connect(
         self, simulation_id: str, agent_factory: agent.AgentFactory
-    ) -> None:
+    ) -> results.SessionResult:
         """Attach a fresh agent to an existing simulation.
 
         Args:
@@ -63,19 +64,22 @@ class CovalVoiceClient:
                 new callback or streaming agent. The SDK always closes a created
                 agent.
 
+        Returns:
+            Completed voice-session identity, audio counts, and trace outcome.
+
         Raises:
             errors.TunnelError: Discovery, protocol, readiness, or completion
                 fails.
             Exception: An agent callback or the relay transport fails.
                 Cancellation propagates after local resources are released.
         """
-        await _session.run_session(
+        return await _session.run_session(
             self.api, simulation_id, agent_factory, self.trace_exporter
         )
 
     async def run(
         self, config: config.RunConfig, agent_factory: agent.AgentFactory
-    ) -> None:
+    ) -> results.RunResult:
         """Launch one run and attach a fresh agent to each conversation.
 
         Args:
@@ -84,13 +88,18 @@ class CovalVoiceClient:
                 fresh agent. It may be called concurrently for different
                 conversations.
 
+        Returns:
+            Hosted run identity, completion status, and local session outcomes.
+
         Raises:
+            errors.RunError: A launched run fails; result retains its identity,
+                last observed hosted status, and completed local sessions.
             errors.TunnelError: Launch, attachment, or monitoring fails, the run
                 does not complete successfully, or the batch deadline expires.
                 Active local sessions are cancelled; this does not cancel the
                 hosted run.
             Exception: Agent or transport setup fails.
         """
-        await _runs.launch_and_run(
+        return await _runs.launch_and_run(
             self.api, config, agent_factory, self.trace_exporter
         )

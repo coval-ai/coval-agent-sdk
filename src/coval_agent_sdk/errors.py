@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from coval_agent_sdk import results
+
 
 class TunnelError(RuntimeError):
     """The Coval API or relay could not complete a voice session."""
@@ -27,3 +29,21 @@ class CovalHttpError(TunnelError):
 
 class CovalConnectionError(TunnelError):
     """An API request could not reach Coval."""
+
+
+class RunError(TunnelError):
+    """A launched run failed, retaining its known identity and local outcomes.
+
+    Attributes:
+        result: Snapshot after local cleanup. Hosted work may still be running.
+    """
+
+    def __init__(self, message: str, *, result: results.RunResult) -> None:
+        """Attach the partial run outcome to a failure.
+
+        Args:
+            message: Explanation of the failure.
+            result: Last known hosted status and completed local sessions.
+        """
+        super().__init__(message)
+        self.result = result

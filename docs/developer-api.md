@@ -1,81 +1,34 @@
 # Developer API and Ergonomics
 
-Status: pre-release design proposal. The README and public docstrings describe the implemented API. New names, result objects, and context objects below are sketches, not implemented interfaces.
+The README and public docstrings describe the implemented API. Factory context objects below remain proposals; the result objects described here are implemented.
 
-## The Developer Journey
+## Developer journey
 
-A developer already has a voice agent. They should install one local SDK, select a Coval workspace and test fixtures, provide a per-conversation agent factory, and run a simulation. Coval owns the simulated caller and evaluation; the developer's process owns their agent. Each conversation gets its own adapter and lifecycle. The SDK owns outbound connectivity, authentication, discovery, audio pacing, and terminal cleanup.
+A developer installs the SDK, selects an environment and workspace, provides existing agent/persona/test-set fixture IDs, and passes a per-conversation factory to `CovalVoiceClient.run()`. Use `connect()` to attach to an existing simulation. The factory receives `simulation_id` and returns a fresh callback or streaming agent. Provider configuration belongs in the adapter.
 
-Keep these responsibilities distinct: the SDK should not require an agent framework or a backend checkout, and an adapter should not implement relay authentication, retries, or run discovery. Package installation and deterministic validation should need no live credentials.
+The SDK is a Python library with no CLI, module execution entry point, internal logging, or console output. It returns results and raises failures; the application owns presentation. The Agent Playground has its own launcher using this Python API.
 
-## Current Executable API
+## Implemented results
 
-```python
-import asyncio
-import os
+`run()` returns an immutable `RunResult` with `run_id`, the last hosted `status`, and `conversations: tuple[SessionResult, ...]`. Successful completion requires the hosted run to be `COMPLETED` and every eligible conversation to have attached and finished locally. Execution completion does not mean quality criteria passed.
 
-import coval_agent_sdk
-import my_agent
+`connect()` returns an immutable `SessionResult` with `simulation_id`, local voice `status`, received/sent PCM byte counts, and optional `trace: TraceResult`. Voice completion does not imply hosted evaluation completion. A trace result reports `uploaded_spans` and an optional flush/upload `error`; disabled tracing is represented by `None`. Telemetry failures do not turn a completed conversation into a failed voice session.
 
+After run creation, an SDK run failure raises `RunError`. Its `result` carries the run ID, last observed monitoring status (`None` before the first status response), and completed local conversations after cleanup. The hosted status may still indicate work in progress; the SDK does not invent a hosted cancellation outcome. Failures before run creation and cancellation propagate without fabricating a run result.
 
-async def main():
-    client = coval_agent_sdk.CovalVoiceClient(
-        api_key=os.environ["COVAL_API_KEY"],
-        workspace_id=os.environ["COVAL_WORKSPACE_ID"],
-        api_base_url="https://api.coval.dev/v1-staging",
-    )
-    await client.run(
-        coval_agent_sdk.RunConfig(
-            agent_id="AGENT_ID",
-            persona_id="PERSONA_ID",
-            test_set_id="TEST_SET_ID",
-            run_timeout_seconds=600,
-        ),
-        my_agent.create_agent,
-    )
+## Remaining factory context proposal
 
-
-asyncio.run(main())
-```
-
-`my_agent` is the developer's own adapter module. In the library API its factory receives `simulation_id` and returns a fresh callback or streaming agent. The generic CLI currently expects a zero-argument `create_agent()`. Both `run()` and `connect()` return `None`; run identity and completion information are printed. The default API endpoint is production, and workspace selection is optional in the client, so examples should select staging and an explicit workspace while developing.
-
-The streaming adapter implements `on_ready()`, `on_audio(bytes)`, `audio_output()`, and `close()`. Its callbacks enqueue promptly, its output is an independent async stream, and it owns cancellation of its own provider tasks. Audio is PCM16 little-endian, mono, 16 kHz. The SDK does not resample arbitrary adapter output or implement relay interruption/clear controls.
-
-## First Design Pass
-
-### 1. Use One Factory Contract Everywhere
-
-The CLI and Python API should construct agents with the same information. Candidate shape:
+The current factory receives a simulation-ID string. A possible future immutable context could also describe audio format:
 
 ```python
 def create_agent(session: VoiceSession) -> StreamingVoiceAgent:
     return MyAgent(conversation_id=session.simulation_id)
 ```
 
-The proposed `VoiceSession` describes the simulation identity and negotiated audio format. It contains no relay tokens or SDK transport objects. The context is immutable and per conversation; provider-specific setup stays in the adapter. Decide whether the typed context earns its extra concept over the current simulation-ID string before implementing it. Implementing this proposal requires an explicit decision about existing factory call sites.
+`VoiceSession` is not implemented. Decide whether a context earns its extra concept before adding it. It would contain no relay tokens or transport objects. The removed SDK CLI does not introduce a second factory contract to support.
 
-### 2. Return a Useful Result
+## Design boundaries
 
-Keep the current `RunConfig` shape while making completion inspectable in code:
+The distribution is `coval-agent-sdk` and imports use `coval_agent_sdk`. This unreleased SDK has no backward-compatibility obligations: update consumers alongside intentional API changes without aliases or deprecation paths. Keep provider frameworks, backend configuration, and application policy outside the package.
 
-```python
-result = await client.run(config, my_agent.create_agent)
-print(result.run_id, result.status)
-for conversation in result.conversations:
-    print(conversation.simulation_id, conversation.status)
-```
-
-The proposed result describes persisted execution outcomes and identifiers. Metric values are separate from successful evaluation execution. An evaluator finishing does not mean the agent passed its quality criteria. Trace-export warnings should be distinct from voice-session failure, and local cancellation must not imply the hosted run was cancelled. Decide how a failed batch exposes partial results alongside a typed error rather than silently returning success.
-
-### 3. Make Setup and Failures Legible
-
-The installable distribution name is `coval-agent-sdk`. Python imports use `coval_agent_sdk` and the console command is `coval-agent`. The SDK is unreleased and has no backward-compatibility obligations; update consumers with an intentional API change instead of adding aliases or deprecation paths. Avoid adding a second client class just to shorten its name. Make the selected environment and workspace clear at the entry point; do not silently change the selected environment or API default.
-
-Separate fixture/configuration mistakes, authentication failures, provider errors, transport/backpressure failures, timeouts, and telemetry warnings in the developer-facing result/error contract. Keep run and simulation IDs available for debugging. Never include credentials or one-use relay offers in result objects or normal diagnostics.
-
-## Order of Iteration
-
-First settle the smallest first-run example, factory contract, and result shape. Implement the agreed contract with focused lifecycle and public API tests. Exercise a real adapter through an editable install for iteration and a built wheel for packaging acceptance. Keep the proposal and executable documentation consistent as decisions settle.
-
-Server-side API, worker, relay, and infrastructure behavior remains outside this package. Release preparation is documented in [releasing](releasing.md).
+Environment defaults, a common SDK error hierarchy, and optional tracing dependencies are separate design decisions. Server-side API, worker, relay, and infrastructure behavior is outside this package. Release preparation is documented in [releasing](releasing.md).

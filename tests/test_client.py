@@ -21,6 +21,7 @@ from coval_agent_sdk import _session
 from coval_agent_sdk import client as voice_client
 from coval_agent_sdk import config as run_config
 from coval_agent_sdk import errors
+from coval_agent_sdk import results
 from coval_agent_sdk import tracing
 
 TOKEN_EXPIRES_AT_EPOCH_SECONDS = 9_999_999_999
@@ -125,7 +126,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                             }
                         }
 
-                async def session(*args) -> None:
+                async def session(*args) -> results.SessionResult:
                     nonlocal cancelled
                     if expires:  # noqa: B023 - The session is awaited within this case.
                         try:
@@ -133,6 +134,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                         except asyncio.CancelledError:
                             cancelled = True
                             raise
+                    return results.SessionResult("attached", 0, 0)
 
                 config = run_config.RunConfig(
                     agent_id="agent",
@@ -151,11 +153,20 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 ):
                     if expires:
                         with self.assertRaisesRegex(
-                            errors.TunnelError, "within 10 seconds"
-                        ):
+                            errors.RunError, "within 10 seconds"
+                        ) as failure:
                             await _runs.launch_and_run(
                                 BatchApi(), config, mock.Mock()
                             )
+                        self.assertEqual(
+                            failure.exception.result.run_id, "run-1"
+                        )
+                        self.assertEqual(
+                            failure.exception.result.status, "RUNNING"
+                        )
+                        self.assertEqual(
+                            failure.exception.result.conversations, ()
+                        )
                     else:
                         await _runs.launch_and_run(
                             BatchApi(), config, mock.Mock()
@@ -196,13 +207,14 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 session_finished.set()
                 return {"run": {"status": "COMPLETED"}}
 
-        async def session(*args) -> None:
+        async def session(*args) -> results.SessionResult:
             nonlocal session_cancelled
             try:
                 await session_finished.wait()
             except asyncio.CancelledError:
                 session_cancelled = True
                 raise
+            return results.SessionResult("attached", 0, 0)
 
         api = MonitoringApi()
         config = run_config.RunConfig(

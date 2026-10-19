@@ -30,7 +30,6 @@ def _check(tmp_path, module, source):
     [
         ("_session", "from coval_agent_sdk import _connection\n"),
         ("config", "from coval_agent_sdk import _defaults\n"),
-        ("__main__", "from coval_agent_sdk import _cli\n"),
         (
             "__init__",
             (

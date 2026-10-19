@@ -17,7 +17,6 @@ from websockets import frames
 
 import coval_agent_sdk
 from coval_agent_sdk import _audio
-from coval_agent_sdk import _cli
 from coval_agent_sdk import _connection
 from coval_agent_sdk import _defaults
 from coval_agent_sdk import _http
@@ -298,18 +297,6 @@ assert (
     subprocess.run(  # noqa: S603 - Fixed interpreter and source, no user input.
         [sys.executable, "-I", "-c", code], cwd=tmp_path, check=True
     )
-
-
-def test_cli_rejects_an_invalid_adapter_before_connecting(monkeypatch):
-    module = types.ModuleType("synthetic_agent")
-    module.create_agent = lambda: object()
-    monkeypatch.setitem(sys.modules, "synthetic_agent", module)
-    with pytest.raises(
-        coval_agent_sdk.TunnelError, match=r"on_ready.*on_audio.*close"
-    ):
-        _cli.load_agent("synthetic_agent")
-    module.create_agent = StreamingAgent
-    assert isinstance(_cli.load_agent("synthetic_agent"), StreamingAgent)
 
 
 @pytest.mark.asyncio

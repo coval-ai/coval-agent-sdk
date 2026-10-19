@@ -34,8 +34,9 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 
 ## Package and API
 
-- Use `coval-agent-sdk` as the distribution name, `coval_agent_sdk` as the Python package, and the entry points documented in `README.md`.
+- Use `coval-agent-sdk` as the distribution name, `coval_agent_sdk` as the Python package, and the library API documented in `README.md`.
 - Treat this unreleased SDK as a clean slate; update consumers alongside API changes without compatibility aliases or deprecation paths.
+- Return outcomes and raise failures without printing, logging, configuring logging, or adding CLI entry points.
 - Keep internal orchestration out of public client reexports; expose a definition through the root facade only when it is part of the reviewed developer API.
 - Keep provider frameworks, backend imports, AWS configuration, and consumer source paths outside the core SDK.
 - Add a dependency only for a concrete runtime or development requirement and keep its supported Python range consistent with `pyproject.toml`.
@@ -57,7 +58,7 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 - Follow `CONTRIBUTING.md` for behavior-focused tests, reviewable changes, comments, and Markdown.
 - Keep tests outside `src/` and exercise installed-package boundaries without modifying `sys.path`.
 - Patch dependencies at the module that owns them and keep the behavior under test real.
-- Preserve assertions for failure, cancellation, cleanup, and supported alternate entry points when reorganizing tests.
+- Preserve assertions for failure, cancellation, cleanup, and supported public entry points when reorganizing tests.
 - Distinguish local, mocked, and hosted evidence; do not infer a completed simulation from a successful launch or connection.
 - Keep each rule in one authoritative document and link to it from related pages.
 - Keep public documentation focused on how to use and change the SDK; retain internal delivery history in the work tracker.

@@ -44,9 +44,6 @@ dev = [
   "twine>=6,<7",
 ]
 
-[project.scripts]
-coval-agent = "coval_agent_sdk._cli:cli"
-
 [tool.setuptools]
 package-dir = {"" = "src"}
 

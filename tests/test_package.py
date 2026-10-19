@@ -1,4 +1,4 @@
-"""Installed public API, license, type marker, and package entry point."""
+"""Installed public API, license, type marker, and library-only distribution."""
 
 import importlib.metadata
 import pathlib
@@ -12,6 +12,7 @@ from coval_agent_sdk import agent
 from coval_agent_sdk import client
 from coval_agent_sdk import config
 from coval_agent_sdk import errors
+from coval_agent_sdk import results
 from coval_agent_sdk import tracing
 
 
@@ -23,6 +24,10 @@ def test_public_facade_exports_the_documented_definitions():
         "CovalTraceExporter": tracing.CovalTraceExporter,
         "CovalVoiceClient": client.CovalVoiceClient,
         "RunConfig": config.RunConfig,
+        "RunError": errors.RunError,
+        "RunResult": results.RunResult,
+        "SessionResult": results.SessionResult,
+        "TraceResult": results.TraceResult,
         "StreamingVoiceAgent": agent.StreamingVoiceAgent,
         "TunnelError": errors.TunnelError,
         "VoiceAgent": agent.VoiceAgent,
@@ -40,7 +45,7 @@ def test_distribution_includes_types_and_no_tests_or_backend():
         (entry.name, entry.value)
         for entry in package.entry_points
         if entry.group == "console_scripts"
-    ] == [("coval-agent", "coval_agent_sdk._cli:cli")]
+    ] == []
     assert (
         pathlib.Path(coval_agent_sdk.__file__).with_name("py.typed").is_file()
     )
@@ -48,24 +53,19 @@ def test_distribution_includes_types_and_no_tests_or_backend():
     assert not any(path.startswith(("tests/", "backend/")) for path in files)
 
 
-@pytest.mark.parametrize("entry_point", ["module", "console"])
-def test_package_cli_help_works_without_credentials(tmp_path, entry_point):
-    command = (
-        [sys.executable, "-I", "-m", "coval_agent_sdk"]
-        if entry_point == "module"
-        else [str(pathlib.Path(sys.executable).with_name("coval-agent"))]
-    )
-    result = subprocess.run(  # noqa: S603 - Fixed installed entry points only.
-        [*command, "--help"],
+def test_package_has_no_executable_entry_point(tmp_path):
+    package_path = pathlib.Path(coval_agent_sdk.__file__).parent
+    assert not (package_path / "__main__.py").exists()
+    assert not (package_path / "_cli.py").exists()
+    result = subprocess.run(
+        [sys.executable, "-I", "-m", "coval_agent_sdk"],
         cwd=tmp_path,
-        check=True,
+        check=False,
         capture_output=True,
         text=True,
     )
-    assert "--agent-module" in result.stdout
-    assert "--workspace-id" in result.stdout
-    assert "connect" in result.stdout
-    assert "run" in result.stdout
+    assert result.returncode != 0
+    assert "cannot be directly executed" in result.stderr
 
 
 @pytest.mark.parametrize(

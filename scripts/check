@@ -26,4 +26,3 @@ print("Installed coval-agent-sdk; imports resolve to the isolated wheel.")
 PYTHON
 env -u PYTHONPATH "$wheel_python" -m pytest --import-mode=importlib \
   "$project_root/tests" -q
-env -u PYTHONPATH "$validation_root/venv/bin/coval-agent" --help

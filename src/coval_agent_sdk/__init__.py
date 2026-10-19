@@ -6,7 +6,11 @@ from coval_agent_sdk.client import CovalVoiceClient
 from coval_agent_sdk.config import RunConfig
 from coval_agent_sdk.errors import CovalConnectionError
 from coval_agent_sdk.errors import CovalHttpError
+from coval_agent_sdk.errors import RunError
 from coval_agent_sdk.errors import TunnelError
+from coval_agent_sdk.results import RunResult
+from coval_agent_sdk.results import SessionResult
+from coval_agent_sdk.results import TraceResult
 from coval_agent_sdk.tracing import CovalTraceError
 from coval_agent_sdk.tracing import CovalTraceExporter
 
@@ -17,7 +21,11 @@ __all__ = [
     "CovalTraceExporter",
     "CovalVoiceClient",
     "RunConfig",
+    "RunError",
+    "RunResult",
+    "SessionResult",
     "StreamingVoiceAgent",
+    "TraceResult",
     "TunnelError",
     "VoiceAgent",
 ]

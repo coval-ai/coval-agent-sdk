@@ -10,10 +10,10 @@ Use Python 3.12 and [uv](https://docs.astral.sh/uv/) for development. The packag
 git clone https://github.com/coval-ai/coval-agent-sdk.git
 cd coval-agent-sdk
 scripts/install
-.venv/bin/python -m coval_agent_sdk --help
+.venv/bin/python -c "import coval_agent_sdk"
 ```
 
-The editable installation makes source changes available in `.venv`. Installation, CLI help, static checks, and tests do not need Coval or model-provider credentials. Use `PYTHON_VERSION=3.10 scripts/install` in a fresh checkout to create a development environment for another supported interpreter.
+The editable installation makes source changes available in `.venv`. Installation, imports, static checks, and tests do not need Coval or model-provider credentials. Use `PYTHON_VERSION=3.10 scripts/install` in a fresh checkout to create a development environment for another supported interpreter.
 
 ## Pull requests
 
@@ -33,7 +33,7 @@ scripts/lint
 scripts/check
 ```
 
-`scripts/lint` runs Ruff lint, Ruff formatting checks, the architecture policy, and strict Pyright checks for production code. `scripts/check` also builds a source distribution, builds its wheel, checks metadata, installs the wheel into an isolated environment, and runs the SDK's tests and CLI outside the checkout. CI uses the same entry points.
+`scripts/lint` runs Ruff lint, Ruff formatting checks, the architecture policy, and strict Pyright checks for production code. `scripts/check` also builds a source distribution, builds its wheel, checks metadata, installs the wheel into an isolated environment, and runs the SDK's tests outside the checkout. CI uses the same entry points.
 
 For a focused test during iteration:
 

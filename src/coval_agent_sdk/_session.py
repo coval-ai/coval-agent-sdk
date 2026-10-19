@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator
 import json
-import sys
 import time
 from typing import Any
 from typing import cast
@@ -21,6 +20,7 @@ from coval_agent_sdk import _defaults
 from coval_agent_sdk import _http
 from coval_agent_sdk import agent as agent_contract
 from coval_agent_sdk import errors
+from coval_agent_sdk import results
 from coval_agent_sdk import tracing
 
 
@@ -36,7 +36,7 @@ async def run_session(
     simulation_id: str,
     agent_factory: agent_contract.AgentFactory,
     trace_exporter: tracing.CovalTraceExporter | None = None,
-) -> None:
+) -> results.SessionResult:
     """Connect one simulation with a fresh agent and guaranteed local cleanup.
 
     Args:
@@ -49,7 +49,9 @@ async def run_session(
         errors.TunnelError: Relay discovery or the session protocol fails.
         Exception: Agent or transport work fails; cleanup preserves that error.
     """
-    await _Session(api, simulation_id, agent_factory, trace_exporter).run()
+    return await _Session(
+        api, simulation_id, agent_factory, trace_exporter
+    ).run()
 
 
 class _Session:
@@ -69,10 +71,11 @@ class _Session:
         self._output = _audio.OutputAudio(self._agent, simulation_id)
         self._received_pcm_bytes = 0
         self._sender: asyncio.Task[None] | None = None
+        self._trace_result: results.TraceResult | None = None
         self._completed = False
         self._session_started = False
 
-    async def run(self) -> None:
+    async def run(self) -> results.SessionResult:
         """Run the exchange, preserving the primary error through cleanup."""
         session_error: BaseException | None = None
         try:
@@ -100,21 +103,20 @@ class _Session:
             ):
                 self._completed = True
                 session_error = None
-                print(
-                    (
-                        f"[{self._simulation_id}] Coval confirmed "
-                        f"completion after the relay closed."
-                    ),
-                    flush=True,
-                )
-                return
-            session_error = exception
-            raise
+            else:
+                session_error = exception
+                raise
         except BaseException as exception:
             session_error = exception
             raise
         finally:
             await self._cleanup(session_error)
+        return results.SessionResult(
+            simulation_id=self._simulation_id,
+            received_audio_bytes=self._received_pcm_bytes,
+            sent_audio_bytes=self._output.sent_pcm_bytes,
+            trace=self._trace_result,
+        )
 
     async def _exchange(self) -> None:
         """Own the relay context until terminal control or socket closure."""
@@ -123,10 +125,6 @@ class _Session:
         )
         async with connection:
             websocket = connection
-            print(
-                f"[{self._simulation_id}] Connected to Coval voice relay.",
-                flush=True,
-            )
             ready = asyncio.Event()
             self._sender = asyncio.create_task(
                 self._output.send(websocket, ready)
@@ -144,13 +142,6 @@ class _Session:
                 self._api, self._simulation_id
             ):
                 self._completed = True
-                print(
-                    (
-                        f"[{self._simulation_id}] Coval confirmed "
-                        f"completion after the relay closed."
-                    ),
-                    flush=True,
-                )
                 return
             raise errors.TunnelError(
                 f"Simulation {self._simulation_id} closed its "
@@ -187,10 +178,6 @@ class _Session:
             if greeting:
                 self._output.queue_reply(greeting)
         elif message_type == "session_end":
-            print(
-                f"[{self._simulation_id}] Coval ended the session.",
-                flush=True,
-            )
             self._completed = True
             return
         elif message_type == "error":
@@ -265,10 +252,8 @@ class _Session:
                         api_key=self._api.api_key,
                         workspace_id=self._api.workspace_id,
                     )
-                    print(
-                        f"[{self._simulation_id}] Uploaded "
-                        f"{span_count} trace spans.",
-                        flush=True,
+                    self._trace_result = results.TraceResult(
+                        uploaded_spans=span_count
                     )
             except BaseException as exception:
                 primary_error = (
@@ -284,16 +269,8 @@ class _Session:
                 elif self._completed and isinstance(
                     exception, tracing.CovalTraceError
                 ):
-                    print(
-                        (
-                            f"[{self._simulation_id}] Voice session "
-                            f"completed, but trace export failed: "
-                            f"{exception}. Retry trace upload from "
-                            f"the retained exporter; do not rerun "
-                            f"the conversation."
-                        ),
-                        file=sys.stderr,
-                        flush=True,
+                    self._trace_result = results.TraceResult(
+                        error=str(exception)
                     )
                 else:
                     cleanup_error = exception
@@ -302,14 +279,6 @@ class _Session:
                     self._trace_exporter.discard(
                         simulation_id=self._simulation_id
                     )
-        print(
-            (
-                f"[{self._simulation_id}] PCM audio: received "
-                f"{self._received_pcm_bytes} bytes; sent "
-                f"{self._output.sent_pcm_bytes} bytes."
-            ),
-            flush=True,
-        )
         if cleanup_error is not None:
             raise cleanup_error
 

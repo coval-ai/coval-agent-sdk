@@ -30,7 +30,7 @@ Internal modules import the owner of a definition, not the root facade. The arch
 
 `src/coval_agent_sdk/__init__.py` contains only its module docstring, explicit supported public imports, and a literal `__all__`. It performs no I/O, client construction, configuration, registration, or logging setup. The architecture check verifies that its imports and `__all__` agree.
 
-A new subpackage starts with a docstring-only initializer unless it has a reviewed public facade. Put executable package startup in `__main__.py`. Do not expose internal helpers or add alternate import paths merely to shorten a reference. Update the public API test and documentation when an export intentionally changes.
+A new subpackage starts with a docstring-only initializer unless it has a reviewed public facade. Keep launchers outside this library package. Do not expose internal helpers or add alternate import paths merely to shorten a reference. Update the public API test and documentation when an export intentionally changes.
 
 ## Formatting and names
 

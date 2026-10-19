@@ -56,6 +56,10 @@ Tracing is optional. Share one `CovalTraceExporter` between the pipeline's OpenT
 
 The exporter buffers at most 10,000 ended spans and 10,000 trace metadata entries by default. Tune `max_buffered_spans` and `max_buffered_traces` for the process. Damaged traces retain rejection information so later roots cannot turn an incomplete trace into a successful upload. Uploading spans remain counted against the buffer budget.
 
-Completed conversations are uploaded individually. Failed conversations close, flush, and discard their spans. An upload failure after a completed voice session is reported separately without rerunning the conversation or cancelling sibling calls; retained spans can be retried explicitly through the exporter. Agent and session failures still propagate.
+Completed conversations are uploaded individually. Failed conversations close, flush, and discard their spans. An upload failure after a completed voice session is returned in `SessionResult.trace.error` without rerunning the conversation or cancelling sibling calls; retained spans can be retried explicitly through the exporter. Agent and session failures still propagate.
 
 Prompts, transcripts, and model output may appear in spans. Enable export only when that data is intended for Coval, and keep test fixtures synthetic.
+
+## Returned outcomes
+
+After cleanup, `connect()` returns the simulation ID, local completion status, audio byte counts, and optional trace-delivery outcome. `run()` returns the run ID, hosted completion status, and completed session results. A post-launch SDK run failure raises `RunError` carrying the known run snapshot. Its status is `None` until a monitoring response supplies one. The SDK emits no console output or log records; applications decide how to present results.

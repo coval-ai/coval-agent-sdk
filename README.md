@@ -2,7 +2,7 @@
 
 Connect Python voice agents to Coval simulations through an authenticated outbound WebSocket. Your process runs the agent; Coval supplies the simulated caller, records the conversation, and evaluates the result. The agent does not need a public URL or a listening port.
 
-The distribution is `coval-agent-sdk`, the Python package is `coval_agent_sdk`, and the CLI is `coval-agent`. Requires Python 3.10 or newer. This SDK is in pre-release development; install from a checkout while the API is being designed.
+The distribution is `coval-agent-sdk`, the Python package is `coval_agent_sdk`, and the API is a Python library. Requires Python 3.10 or newer. This SDK is in pre-release development; install from a checkout while the API is being designed.
 
 ## Install from source
 
@@ -17,7 +17,7 @@ For SDK development, use the editable setup instead:
 
 ```sh
 scripts/install
-.venv/bin/python -m coval_agent_sdk --help
+.venv/bin/python -c "import coval_agent_sdk"
 ```
 
 See [local development](docs/local-development.md) for building a wheel and installing it into another project. A source install does not publish a package.
@@ -34,7 +34,7 @@ import coval_agent_sdk
 import my_agent
 
 
-async def main() -> None:
+async def main() -> coval_agent_sdk.RunResult:
     client = coval_agent_sdk.CovalVoiceClient(
         api_key=os.environ["COVAL_API_KEY"],
         workspace_id=os.environ["COVAL_WORKSPACE_ID"],
@@ -44,16 +44,17 @@ async def main() -> None:
         persona_id=os.environ["COVAL_PERSONA_ID"],
         test_set_id=os.environ["COVAL_TEST_SET_ID"],
     )
-    await client.run(config, my_agent.create_agent)
+    result = await client.run(config, my_agent.create_agent)
+    return result
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`my_agent` is your adapter module. Its `create_agent(simulation_id)` factory returns a fresh agent for each conversation. Use `await client.connect(simulation_id, my_agent.create_agent)` to attach to an existing simulation. Both client methods currently return `None` and print run/session identifiers; proposed result objects are described separately in [API design](docs/developer-api.md).
+`my_agent` is your adapter module. Its `create_agent(simulation_id)` factory returns a fresh agent for each conversation. Use `await client.connect(simulation_id, my_agent.create_agent)` to attach to an existing simulation. `run()` returns a `RunResult`; `connect()` returns a `SessionResult`. The SDK does not print, log, configure logging, or provide a command-line interface.
 
-The client defaults to `https://api.coval.dev/v1`. Pass `api_base_url` to select another environment, and select the intended workspace explicitly when testing. An API key must be authorized for that workspace. Local installation, CLI help, and automated tests do not require an API key.
+The client defaults to `https://api.coval.dev/v1`. Pass `api_base_url` to select another environment, and select the intended workspace explicitly when testing. An API key must be authorized for that workspace. Local installation, imports, and automated tests do not require an API key.
 
 ## Implement an adapter
 
@@ -72,25 +73,19 @@ The `VoiceAgent` callback protocol is also available: async `on_ready()` and `on
 
 Read [runtime contracts](docs/runtime.md) before implementing an adapter. They cover receive-loop backpressure, pacing, timeouts, cancellation, and supported completion behavior. The SDK does not resample arbitrary audio or implement relay interruption/clear controls.
 
-## Command line
+## Results and failures
 
-The CLI adapter module exposes a zero-argument `create_agent()` factory. This differs from the Python client's simulation-ID factory and is a current design limitation.
+`RunResult` contains `run_id`, the hosted `status`, and a tuple of completed `conversations`. Each `SessionResult` contains `simulation_id`, local voice `status`, `received_audio_bytes`, `sent_audio_bytes`, and an optional `trace` outcome. These immutable objects contain no relay credentials or transport objects.
 
-```sh
-coval-agent --workspace-id WORKSPACE_ID --agent-module my_agent \
-  run --agent-id AGENT_ID --persona-id PERSONA_ID --test-set-id TEST_SET_ID
+A returned run has completed its execution; this does not mean the agent passed its quality criteria. A returned session describes completed voice transport, not hosted evaluation. With tracing disabled, `session.trace` is `None`. Otherwise, `TraceResult.uploaded_spans` reports delivered spans and `TraceResult.error` contains an optional flush/upload failure. The calling application decides how to store or display those outcomes.
 
-coval-agent --workspace-id WORKSPACE_ID --agent-module my_agent \
-  connect SIMULATION_ID
-```
-
-`python -m coval_agent_sdk` accepts the same arguments. The CLI reads `COVAL_API_KEY`, `COVAL_WORKSPACE_ID`, and `COVAL_API_BASE_URL` from the environment; explicit workspace/base-URL flags take precedence. Use `run --run-timeout-seconds` to change the batch deadline, which defaults to one hour and includes queued conversations and evaluation postprocessing.
+Failures raise instead of returning success. After a run is created, an SDK run failure raises `RunError` with a `result` snapshot containing its ID, last observed monitoring status (`None` before the first status response), and completed local conversations. Failed, cancelled, unfinished, or missed conversations do not appear as successful results. Local cancellation still propagates after cleanup and does not imply hosted cancellation.
 
 ## Optional traces
 
 Create a `CovalTraceExporter`, register it with your pipeline's OpenTelemetry setup, and pass the same exporter to `CovalVoiceClient(trace_exporter=...)`. Set the pipeline's conversation identifier to the simulation ID received by the agent factory. The SDK flushes ended spans and uploads each completed conversation separately.
 
-Spans may contain prompts, transcripts, and model output. Enable upload only for data you intend to send to Coval. Failed-session traces are discarded after cleanup; a failed upload after a completed voice session is reported separately and can be retried through the retained exporter. See [trace lifecycle](docs/runtime.md#trace-lifecycle) for buffer limits and failure semantics.
+Spans may contain prompts, transcripts, and model output. Enable upload only for data you intend to send to Coval. Failed-session traces are discarded after cleanup; a failed upload after a completed voice session is returned in `SessionResult.trace.error` and can be retried through the retained exporter. See [trace lifecycle](docs/runtime.md#trace-lifecycle) for buffer limits and failure semantics.
 
 ## Develop and contribute
 

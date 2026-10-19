@@ -8,8 +8,9 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 | --- | --- |
 | `src/coval_agent_sdk/__init__.py` | The explicit supported public API and its `__all__`. |
 | `agent.py` | Callback protocol, streaming abstract base class, and per-conversation factory type. |
+| `results.py` | Immutable run, session, and trace outcomes. |
 | `config.py` | Immutable run configuration and its validation. |
-| `errors.py` | API and relay errors exposed to callers. |
+| `errors.py` | API and relay errors, including partial run outcomes exposed to callers. |
 | `client.py` | Public `run()` and `connect()` orchestration. |
 | `tracing.py` | Bounded conversation trace buffers and upload lifecycle. |
 | `_http.py` | Authenticated JSON requests; mutation requests are not retried. |
@@ -17,15 +18,13 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 | `_audio.py` | Outgoing PCM pacing, reply budgets, and streaming producer ownership. |
 | `_session.py` | One agent/socket session, readiness, input acknowledgements, and cleanup. |
 | `_runs.py` | Run launch, paginated conversation discovery, monitoring, and sibling cancellation. |
-| `_cli.py` | Arguments, environment configuration, adapter loading, and CLI exit status. |
-| `__main__.py` | The `python -m coval_agent_sdk` entry point. |
 | `_defaults.py` | Internal protocol limits and timeout defaults. |
 
 Paths without a directory prefix in this table are relative to `src/coval_agent_sdk/`. Modules beginning with `_` are implementation details; import the documented API from `coval_agent_sdk` in a consumer.
 
 ## Dependency direction
 
-Public client and CLI entry points call run/session orchestration. Orchestration depends on connection, audio, and HTTP owners. Adapter contracts, configuration, errors, and defaults remain small leaf responsibilities. Tracing owns its own buffers and HTTP exporter and does not import session orchestration.
+Public client methods call run/session orchestration. Orchestration depends on connection, audio, and HTTP owners. Adapter contracts, configuration, errors, and defaults remain small leaf responsibilities. Tracing owns its own buffers and HTTP exporter and does not import session orchestration.
 
 Internal code imports owning modules rather than the root public facade. The root initializer is the only symbol-reexport facade. Do not introduce a cycle or move an import inside a function to hide one. `scripts/check_architecture.py` checks the allowed first-party dependency graph, top-level absolute imports, production dependency roots, and initializer contents.
 
@@ -44,3 +43,7 @@ The trace exporter is process-wide but correlates and uploads one conversation a
 Keep provider-specific models, agent frameworks, resampling, and application policy in adapters or consumer projects. Add a core abstraction only when the SDK owns a demonstrated shared contract. A framework integration does not justify making every SDK installation depend on that framework.
 
 Treat public exports and entry points as deliberate API choices. This pre-release package has no reason to ship alternate import names for unexposed implementation helpers. Proposed interface changes belong in [API design](developer-api.md) until their behavior and migration implications are settled.
+
+## Application output
+
+The SDK returns structured outcomes and raises failures. It does not print, log, configure logging, or ship executable package entry points. Applications own presentation, including any launcher they provide. Trace-upload diagnostics belong in session results rather than console warnings.

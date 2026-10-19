@@ -11,7 +11,8 @@ import sys
 # set.
 _DEPENDENCIES: dict[str, set[str]] = {
     "_defaults": set(),
-    "errors": set(),
+    "errors": {"results"},
+    "results": set(),
     "agent": set(),
     "config": {"_defaults"},
     "tracing": set(),
@@ -26,6 +27,7 @@ _DEPENDENCIES: dict[str, set[str]] = {
         "agent",
         "errors",
         "tracing",
+        "results",
     },
     "_runs": {
         "_defaults",
@@ -35,15 +37,7 @@ _DEPENDENCIES: dict[str, set[str]] = {
         "config",
         "errors",
         "tracing",
-    },
-    "_cli": {
-        "_defaults",
-        "_http",
-        "_runs",
-        "_session",
-        "agent",
-        "config",
-        "errors",
+        "results",
     },
     "client": {
         "_defaults",
@@ -53,9 +47,9 @@ _DEPENDENCIES: dict[str, set[str]] = {
         "agent",
         "config",
         "tracing",
+        "results",
     },
-    "__main__": {"_cli"},
-    "__init__": {"agent", "client", "config", "errors", "tracing"},
+    "__init__": {"agent", "client", "config", "errors", "results", "tracing"},
 }
 _FACADES = {"__init__"}
 _EXTERNAL_ROOTS = {"opentelemetry", "websockets"}
