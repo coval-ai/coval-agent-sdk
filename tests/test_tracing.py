@@ -7,7 +7,7 @@ from opentelemetry import trace
 from opentelemetry.sdk import trace as sdk_trace
 from opentelemetry.sdk.trace import export as trace_export
 
-import coval_tracing
+from coval_voice import tracing
 
 
 def make_span(
@@ -31,7 +31,7 @@ class TraceExporterTest(unittest.TestCase):
     """Check the simulation boundary used by the Coval trace endpoint."""
 
     def test_upload_sends_only_the_requested_conversation(self) -> None:
-        collector = coval_tracing.CovalTraceExporter()
+        collector = tracing.CovalTraceExporter()
         provider = sdk_trace.TracerProvider()
         provider.add_span_processor(trace_export.SimpleSpanProcessor(collector))
         tracer = provider.get_tracer(__name__)
@@ -95,7 +95,7 @@ class TraceExporterTest(unittest.TestCase):
     def test_upload_sends_spans_that_arrive_during_the_network_request(
         self,
     ) -> None:
-        collector = coval_tracing.CovalTraceExporter(max_buffered_spans=2)
+        collector = tracing.CovalTraceExporter(max_buffered_spans=2)
         trace_id = 1
         root = make_span(trace_id=trace_id, simulation_id="simulation-a")
         late_span = make_span(trace_id=trace_id)
@@ -134,7 +134,7 @@ class TraceExporterTest(unittest.TestCase):
     ) -> None:
         for capacity in ({"max_buffered_traces": 1}, {"max_buffered_spans": 1}):
             with self.subTest(capacity=capacity):
-                collector = coval_tracing.CovalTraceExporter(**capacity)
+                collector = tracing.CovalTraceExporter(**capacity)
                 collector.export([make_span(trace_id=1, start_time=1)])
                 self.assertEqual(
                     collector.export(
@@ -177,7 +177,7 @@ class TraceExporterTest(unittest.TestCase):
                     trace_export.SpanExportResult.FAILURE,
                 )
                 with self.assertRaisesRegex(
-                    coval_tracing.CovalTraceError, "discarded spans"
+                    tracing.CovalTraceError, "discarded spans"
                 ):
                     collector.upload(
                         simulation_id="abandoned",
@@ -186,7 +186,7 @@ class TraceExporterTest(unittest.TestCase):
                     )
 
     def test_discard_releases_only_the_failed_conversation(self) -> None:
-        collector = coval_tracing.CovalTraceExporter()
+        collector = tracing.CovalTraceExporter()
         collector.export(
             [
                 make_span(trace_id=1, simulation_id="failed"),
@@ -213,7 +213,7 @@ class TraceExporterTest(unittest.TestCase):
             )
 
     def test_exporter_setup_failure_keeps_spans_for_retry(self) -> None:
-        collector = coval_tracing.CovalTraceExporter()
+        collector = tracing.CovalTraceExporter()
         provider = sdk_trace.TracerProvider()
         provider.add_span_processor(trace_export.SimpleSpanProcessor(collector))
         with provider.get_tracer(__name__).start_as_current_span(
@@ -231,7 +231,7 @@ class TraceExporterTest(unittest.TestCase):
                 "coval_voice.tracing.otlp_trace_exporter.OTLPSpanExporter",
                 side_effect=ValueError("bad URL"),
             ),
-            self.assertRaisesRegex(coval_tracing.CovalTraceError, "bad URL"),
+            self.assertRaisesRegex(tracing.CovalTraceError, "bad URL"),
         ):
             collector.upload(**upload_options)
 
@@ -248,7 +248,7 @@ class TraceExporterTest(unittest.TestCase):
     def test_overflow_rejects_damaged_trace_and_recovers(
         self,
     ) -> None:
-        collector = coval_tracing.CovalTraceExporter(max_buffered_spans=3)
+        collector = tracing.CovalTraceExporter(max_buffered_spans=3)
         damaged_trace_id = 1
         unaffected_trace_id = 2
         subsequent_trace_id = 3
@@ -272,7 +272,7 @@ class TraceExporterTest(unittest.TestCase):
             "api_key": "test-key",
         }
         with self.assertRaisesRegex(
-            coval_tracing.CovalTraceError,
+            tracing.CovalTraceError,
             "discarded spans for simulation damaged",
         ):
             collector.upload(simulation_id="damaged", **upload_options)
@@ -309,7 +309,7 @@ class TraceExporterTest(unittest.TestCase):
     def test_failed_upload_keeps_its_capacity_reserved_during_concurrent_export(
         self,
     ) -> None:
-        collector = coval_tracing.CovalTraceExporter(max_buffered_spans=3)
+        collector = tracing.CovalTraceExporter(max_buffered_spans=3)
         uploading_trace_id = 1
         concurrent_trace_id = 2
         collector.export(
@@ -344,12 +344,12 @@ class TraceExporterTest(unittest.TestCase):
             return_value=otlp_exporter,
         ):
             with self.assertRaisesRegex(
-                coval_tracing.CovalTraceError,
+                tracing.CovalTraceError,
                 ("could not receive traces for simulation uploading"),
             ):
                 collector.upload(simulation_id="uploading", **upload_options)
             with self.assertRaisesRegex(
-                coval_tracing.CovalTraceError,
+                tracing.CovalTraceError,
                 "discarded spans for simulation concurrent",
             ):
                 collector.upload(simulation_id="concurrent", **upload_options)
@@ -364,7 +364,7 @@ class TraceExporterTest(unittest.TestCase):
     def test_saturation_cannot_resurrect_a_damaged_trace(
         self,
     ) -> None:
-        collector = coval_tracing.CovalTraceExporter(
+        collector = tracing.CovalTraceExporter(
             max_buffered_spans=3, max_buffered_traces=1
         )
         retained_trace_id = 1
@@ -373,7 +373,7 @@ class TraceExporterTest(unittest.TestCase):
         collector.export(
             [make_span(trace_id=retained_trace_id, simulation_id="retained")]
         )
-        with mock.patch("coval_tracing.time.time_ns", return_value=10):
+        with mock.patch("coval_voice.tracing.time.time_ns", return_value=10):
             self.assertEqual(
                 collector.export([make_span(trace_id=rejected_trace_id)]),
                 trace_export.SpanExportResult.FAILURE,
@@ -405,7 +405,7 @@ class TraceExporterTest(unittest.TestCase):
                 trace_export.SpanExportResult.FAILURE,
             )
             with self.assertRaisesRegex(
-                coval_tracing.CovalTraceError,
+                tracing.CovalTraceError,
                 "discarded spans for simulation rejected",
             ):
                 collector.upload(simulation_id="rejected", **upload_options)
@@ -429,7 +429,7 @@ class TraceExporterTest(unittest.TestCase):
     def test_damaged_trace_metadata_does_not_consume_the_span_budget(
         self,
     ) -> None:
-        collector = coval_tracing.CovalTraceExporter(
+        collector = tracing.CovalTraceExporter(
             max_buffered_spans=1, max_buffered_traces=2
         )
         collector.export([make_span(trace_id=1)])
@@ -462,7 +462,7 @@ class TraceExporterTest(unittest.TestCase):
 
 
 def test_export_rejects_a_span_without_a_trace_context():
-    collector = coval_tracing.CovalTraceExporter()
+    collector = tracing.CovalTraceExporter()
     assert (
         collector.export([sdk_trace.ReadableSpan(name="missing-context")])
         == trace_export.SpanExportResult.FAILURE

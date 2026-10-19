@@ -488,10 +488,10 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
     async def test_cleanup_preserves_session_error_without_exception_notes(
         self,
     ) -> None:
-        class LegacySessionError(RuntimeError):
+        class SessionWithoutNotesError(RuntimeError):
             add_note = None
 
-        session_error = LegacySessionError("session failed")
+        session_error = SessionWithoutNotesError("session failed")
         agent = mock.Mock()
         agent.close = mock.AsyncMock(
             side_effect=RuntimeError("agent cleanup failed")
@@ -509,7 +509,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 _session.trace, "get_tracer_provider", return_value=provider
             ),
             self.assertRaisesRegex(
-                LegacySessionError, "session failed"
+                SessionWithoutNotesError, "session failed"
             ) as raised,
         ):
             await _session.run_session(
@@ -695,14 +695,16 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                     )
 
     async def test_discovery_timeout_is_wrapped_on_python_310(self) -> None:
-        class LegacyAsyncTimeoutError(Exception):
+        class SeparateAsyncTimeoutError(Exception):
             pass
 
         async def timed_out_offer(api, simulation_id):
-            raise LegacyAsyncTimeoutError("discovery timed out")
+            raise SeparateAsyncTimeoutError("discovery timed out")
 
         with (
-            mock.patch.object(asyncio, "TimeoutError", LegacyAsyncTimeoutError),
+            mock.patch.object(
+                asyncio, "TimeoutError", SeparateAsyncTimeoutError
+            ),
             mock.patch.object(_connection, "wait_for_offer", timed_out_offer),
             self.assertRaisesRegex(
                 errors.TunnelError, "connect deadline"
@@ -710,7 +712,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         ):
             await _connection.open_voice_connection(mock.Mock(), "simulation-1")
         self.assertIsInstance(
-            raised.exception.__cause__, LegacyAsyncTimeoutError
+            raised.exception.__cause__, SeparateAsyncTimeoutError
         )
 
     async def test_transient_handshake_failure_reuses_the_same_offer(

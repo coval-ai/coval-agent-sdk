@@ -30,6 +30,7 @@ def _check(tmp_path, module, source):
     [
         ("_session", "from coval_voice import _connection\n"),
         ("config", "from coval_voice import _defaults\n"),
+        ("__main__", "from coval_voice import _cli\n"),
         (
             "__init__",
             (
@@ -50,6 +51,11 @@ def test_architecture_accepts_owning_modules_and_explicit_exports(
     ("module", "source", "diagnostic"),
     [
         ("_session", "from coval_voice import client\n", "must not depend"),
+        (
+            "client",
+            "from coval_voice._session import run_session\n",
+            "owning module",
+        ),
         (
             "_session",
             "from coval_voice._connection import wait_for_offer\n",

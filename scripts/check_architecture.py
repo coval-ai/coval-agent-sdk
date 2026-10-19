@@ -46,21 +46,18 @@ _DEPENDENCIES: dict[str, set[str]] = {
         "errors",
     },
     "client": {
-        "_audio",
-        "_cli",
-        "_connection",
         "_defaults",
         "_http",
         "_runs",
         "_session",
         "agent",
         "config",
-        "errors",
         "tracing",
     },
+    "__main__": {"_cli"},
     "__init__": {"agent", "client", "config", "errors", "tracing"},
 }
-_FACADES = {"__init__", "client"}
+_FACADES = {"__init__"}
 _EXTERNAL_ROOTS = {"opentelemetry", "websockets"}
 
 

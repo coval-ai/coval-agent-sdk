@@ -1,5 +1,6 @@
-include AGENTS.md CONTRIBUTING.md pyrightconfig.sdk.json .python-version
-recursive-include docs *.md *.json
+include AGENTS.md AGENTS.meta.md CONTRIBUTING.md SECURITY.md CHANGELOG.md
+include LICENSE NOTICE pyrightconfig.sdk.json .python-version
+recursive-include docs *.md
 recursive-include scripts *
 recursive-include tests *.py
 global-exclude __pycache__ *.py[cod]

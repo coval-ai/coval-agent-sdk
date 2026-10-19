@@ -283,13 +283,11 @@ async def test_custom_workspace_is_forwarded_on_reads_and_run_launches(
     assert json.loads(requests[1].data) == {"agent_id": "agent-a"}
 
 
-def test_public_package_is_independent_of_a_consumers_coval_tracing_module(
-    tmp_path,
-):
+def test_public_package_imports_its_own_tracing_module(tmp_path):
     code = """
 import sys
 import types
-sys.modules['coval_tracing'] = types.ModuleType('consumer_owned_tracing')
+sys.modules['tracing'] = types.ModuleType('consumer_owned_tracing')
 import coval_voice
 assert coval_voice.CovalTraceExporter.__module__ == 'coval_voice.tracing'
 """

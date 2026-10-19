@@ -1,23 +1,53 @@
 # Local Development
 
-The SDK is developed in the private `coval-ai/coval-agent-sdk` repository. The initial `main` commit contains only the project README; the implementation and design notes are introduced through a draft PR. There is no package-registry publication or publishing workflow. Installation operates on a checked-out project directory or built wheel.
+Use Python 3.12 and `uv` for the normal development environment. Runtime code supports Python 3.10 and newer; local and CI checks must preserve that compatibility.
 
-## Install and Edit
+## Editable installation
 
-Run `scripts/install` from the project root. It creates a Python 3.12 virtual environment and installs the package with its development dependencies in editable mode. The runtime package supports Python 3.10 and newer; choosing 3.12 for local development does not change that compatibility contract. Runtime dependency constraints are preserved from the extracted package; the Ruff and Pyright versions are pinned in `pyproject.toml`.
+```sh
+scripts/install
+.venv/bin/python -m coval_voice --help
+```
 
-Use `.venv/bin/python` and `.venv/bin/coval-tunnel` to select this environment explicitly. No API key is needed for installation, CLI help, tests, builds, or static type checking. Live runs require `COVAL_API_KEY`, a workspace selection, and existing synthetic agent/persona/test-set fixtures; a real agent adapter may also need provider credentials. Tests use controlled collaborators and do not launch simulations.
+`scripts/install` creates `.venv` when absent and installs the SDK with development dependencies in editable mode. Source changes are immediately available in that environment. To choose another supported interpreter in a fresh checkout, set `PYTHON_VERSION` when running the install script.
 
-## Validate the Installed Package
+Use `.venv/bin/python` and `.venv/bin/coval-tunnel` explicitly. No API key is needed for setup, CLI help, lint, type checking, builds, or tests. Live use requires an authorized Coval API key, workspace, and synthetic agent/persona/test-set fixtures; an adapter may also need its own provider credentials.
 
-Run `scripts/lint` for Ruff lint/format, architecture rules, and strict Pyright. Run `scripts/check` for the complete package check. It builds a source distribution and then a wheel from that source distribution, verifies the distribution metadata, installs the wheel into a temporary environment, and executes all SDK test files and CLI help outside the project. It also checks the production package's strict Python types using `pyrightconfig.sdk.json`. The temporary environment is removed on exit. An explicit import check confirms Python loaded the isolated wheel installation rather than this source directory.
+## Checks and builds
 
-Run `scripts/build` when a consumer needs an artifact. It writes the wheel and source distribution to `dist/` and validates their metadata. Building a distribution does not publish it.
+```sh
+scripts/lint
+scripts/check
+scripts/build
+```
 
-## Agent Playground Integration
+`scripts/lint` checks Ruff lint/format, the import/dependency policy, and strict production types. `scripts/check` adds a source-distribution build, a wheel built from that source distribution, metadata checks, and execution of tests/CLI against the wheel in a temporary environment outside the checkout. It verifies imports resolve to that installation rather than the source directory. The temporary environment is removed on exit.
 
-The existing consumer is `agents/pipecat-sdk` in [agent-playground PR #93](https://github.com/coval-ai/agent-playground/pull/93). Its `COVAL_VOICE_SDK_WHEEL` override can install a locally built wheel without a registry. The consumer dependency and install hook use `coval-agent-sdk==0.2.0a1`, matching the standalone wheel. The PR's default install still resolves a package-index version; it has not been rewritten as part of extraction.
+`scripts/build` writes a wheel and source archive to `dist/` and validates their metadata. A build does not upload either artifact. The Ruff and Pyright versions are pinned in `pyproject.toml`; runtime dependency constraints are intentionally separate from development tool selection.
 
-Once the developer API settles, update the consumer dependency and verify its deterministic pipeline tests against the standalone wheel. Repeat the bounded hosted canary when runtime contracts change, recording source and wheel identities, saved audio/transcript, metric outcomes, cleanup, and optional trace upload. The extracted implementation has already been exercised through a standalone wheel; that evidence does not verify future API changes. Live acceptance and outstanding provider, relay, and evaluation limits are tracked in COVAL-7087.
+## Use the SDK in another project
 
-The Pipecat agent remains in agent-playground. The simulation worker, API routes, relay, infrastructure, and application deployments remain in their owning projects. No backend or playground source files are removed by creating this local project.
+For fast local iteration, install this checkout into the consumer's environment:
+
+```sh
+uv pip install --python /path/to/consumer/.venv/bin/python \
+  -e /path/to/coval-agent-sdk
+```
+
+For packaging acceptance, build and install the wheel instead:
+
+```sh
+scripts/build
+uv pip install --python /path/to/consumer/.venv/bin/python \
+  dist/coval_agent_sdk-0.2.0a1-py3-none-any.whl
+```
+
+Run the consumer's relevant tests against that installed wheel. Editable-install success does not prove that the source archive or wheel contains every required file.
+
+The Agent Playground Pipecat adapter is one consumer. Its local install hook accepts `COVAL_VOICE_SDK_WHEEL=/absolute/path/to/the/wheel`. Provider configuration and framework dependencies stay with that adapter, not in this package.
+
+## Live checks
+
+Choose the target API root and workspace explicitly and use synthetic fixtures. Record the source/artifact identity, run and simulation identifiers, terminal outcome, audio/transcript evidence, cleanup, and optional trace upload. Distinguish a completed voice session from a completed batch and from quality-metric results.
+
+Do not put credentials or collected conversation data into the repository. A hosted check needs existing authorization for the selected environment; offline checks remain the default development loop.

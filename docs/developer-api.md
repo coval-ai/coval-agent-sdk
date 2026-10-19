@@ -1,6 +1,6 @@
 # Developer API and Ergonomics
 
-Status: design proposal. The extraction preserves the existing executable API. New names, result objects, and context objects below are sketches, not implemented interfaces.
+Status: pre-release design proposal. The README and public docstrings describe the implemented API. New names, result objects, and context objects below are sketches, not implemented interfaces.
 
 ## The Developer Journey
 
@@ -53,7 +53,7 @@ def create_agent(session: VoiceSession) -> StreamingVoiceAgent:
     return MyAgent(conversation_id=session.simulation_id)
 ```
 
-The proposed `VoiceSession` describes the simulation identity and negotiated audio format. It contains no relay tokens or SDK transport objects. The context is immutable and per conversation; provider-specific setup stays in the adapter. Decide whether the typed context earns its extra concept over the current simulation-ID string before implementing it. Existing factories would need a deliberate compatibility path.
+The proposed `VoiceSession` describes the simulation identity and negotiated audio format. It contains no relay tokens or SDK transport objects. The context is immutable and per conversation; provider-specific setup stays in the adapter. Decide whether the typed context earns its extra concept over the current simulation-ID string before implementing it. Implementing this proposal requires an explicit decision about existing factory call sites.
 
 ### 2. Return a Useful Result
 
@@ -70,12 +70,12 @@ The proposed result describes persisted execution outcomes and identifiers. Metr
 
 ### 3. Make Setup and Failures Legible
 
-The installable distribution name is `coval-agent-sdk`. Python imports remain `coval_voice` and the console command remains `coval-tunnel`; any changes to those interfaces are separate design decisions. Avoid adding a second client class just to shorten its name. Make the selected environment and workspace clear at the entry point; do not silently change the current production default during extraction.
+The installable distribution name is `coval-agent-sdk`. Python imports remain `coval_voice` and the console command remains `coval-tunnel`; any changes to those interfaces are separate design decisions. Avoid adding a second client class just to shorten its name. Make the selected environment and workspace clear at the entry point; do not silently change the selected environment or API default.
 
 Separate fixture/configuration mistakes, authentication failures, provider errors, transport/backpressure failures, timeouts, and telemetry warnings in the developer-facing result/error contract. Keep run and simulation IDs available for debugging. Never include credentials or one-use relay offers in result objects or normal diagnostics.
 
 ## Order of Iteration
 
-First settle the smallest first-run example, factory contract, and result shape. Implement the agreed contract with focused lifecycle/compatibility tests. Then update the Pipecat consumer in agent-playground PR #93 and exercise it through an editable install for iteration and a built wheel for acceptance. The standalone source is hosted in the private `coval-ai/coval-agent-sdk` repository. Package-registry publication remains deferred; the implementation and design stay in a draft PR during iteration.
+First settle the smallest first-run example, factory contract, and result shape. Implement the agreed contract with focused lifecycle and public API tests. Exercise a real adapter through an editable install for iteration and a built wheel for packaging acceptance. Keep the proposal and executable documentation consistent as decisions settle.
 
-Before retiring the SDK files in backend PR #8227, settle ownership of the extracted package and its validation workflow. Server-side API, worker, relay, and infrastructure code remain with their owning services.
+Server-side API, worker, relay, and infrastructure behavior remains outside this package. Release preparation is documented in [releasing](releasing.md).

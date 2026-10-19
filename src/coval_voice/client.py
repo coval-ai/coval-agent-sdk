@@ -9,31 +9,6 @@ from coval_voice import _session
 from coval_voice import agent
 from coval_voice import config
 from coval_voice import tracing
-from coval_voice._audio import send_paced_audio as send_paced_audio
-
-# Preserve previously importable names without coupling internal layers to this
-# facade.
-from coval_voice._cli import cli as cli
-from coval_voice._cli import load_agent as load_agent
-from coval_voice._cli import main as main
-from coval_voice._cli import parse_arguments as parse_arguments
-from coval_voice._connection import ConnectionOffer as ConnectionOffer
-from coval_voice._connection import (
-    open_voice_connection as open_voice_connection,
-)
-from coval_voice._connection import wait_for_offer as wait_for_offer
-from coval_voice._http import CovalApi as CovalApi
-from coval_voice._runs import launch_and_run as launch_and_run
-from coval_voice._session import run_session as run_session
-from coval_voice.agent import AgentFactory as AgentFactory
-from coval_voice.agent import StreamingVoiceAgent as StreamingVoiceAgent
-from coval_voice.agent import VoiceAgent as VoiceAgent
-from coval_voice.config import RunConfig as RunConfig
-from coval_voice.errors import CovalConnectionError as CovalConnectionError
-from coval_voice.errors import CovalHttpError as CovalHttpError
-from coval_voice.errors import TunnelError as TunnelError
-from coval_voice.tracing import CovalTraceError as CovalTraceError
-from coval_voice.tracing import CovalTraceExporter as CovalTraceExporter
 
 
 class CovalVoiceClient:
@@ -119,7 +94,3 @@ class CovalVoiceClient:
         await _runs.launch_and_run(
             self.api, config, agent_factory, self.trace_exporter
         )
-
-
-if __name__ == "__main__":
-    cli()
