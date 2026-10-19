@@ -67,8 +67,8 @@ class CovalVoiceClient:
             Completed voice-session identity, audio counts, and trace outcome.
 
         Raises:
-            errors.TunnelError: Discovery, protocol, readiness, or completion
-                fails.
+            errors.CovalError: An SDK operation fails. Specific subclasses
+                identify API, relay, and trace failures.
             Exception: An agent callback or the relay transport fails.
                 Cancellation propagates after local resources are released.
         """
@@ -97,7 +97,8 @@ class CovalVoiceClient:
                 does not complete successfully, or the batch deadline expires.
                 Active local sessions are cancelled; this does not cancel the
                 hosted run.
-            Exception: Agent or transport setup fails.
+            Exception: An adapter or transport fails. Adapter exceptions and
+                cancellation propagate unchanged after local cleanup.
         """
         return await _runs.launch_and_run(
             self._api, config, agent_factory, self.trace_exporter

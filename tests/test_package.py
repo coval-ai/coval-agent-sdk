@@ -20,6 +20,7 @@ from coval_agent_sdk import telemetry
 def test_public_facade_exports_the_documented_definitions():
     expected = {
         "CovalConnectionError": errors.CovalConnectionError,
+        "CovalError": errors.CovalError,
         "CovalHttpError": errors.CovalHttpError,
         "CovalTraceError": errors.CovalTraceError,
         "CovalVoiceClient": client.CovalVoiceClient,

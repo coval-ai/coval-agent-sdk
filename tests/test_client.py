@@ -510,6 +510,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         )
         exporter = mock.Mock()
         exporter.flush.return_value = False
+        exporter.discard.side_effect = RuntimeError("trace discard failed")
         with (
             mock.patch.object(
                 _connection,

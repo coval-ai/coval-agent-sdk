@@ -81,6 +81,8 @@ Read [runtime contracts](docs/runtime.md) before implementing an adapter. They c
 
 A returned run has completed its execution; this does not mean the agent passed its quality criteria. A returned session describes completed voice transport, not hosted evaluation. With tracing disabled, `session.trace` is `None`. Otherwise, `TraceResult.uploaded_spans` reports delivered spans after a successful upload (`None` when a failure leaves the count unknown), and `TraceResult.error` contains an optional flush/upload failure. The calling application decides how to store or display those outcomes.
 
+Catch `CovalError` for SDK-owned failures, or a specific subclass such as `CovalHttpError`, `TunnelError`, `RunError`, or `CovalTraceError`. Adapter exceptions and `asyncio.CancelledError` propagate unchanged after local cleanup; catching `CovalError` does not catch them.
+
 Failures raise instead of returning success. After a run is created, an SDK run failure raises `RunError` with a `result` snapshot containing its ID, last observed monitoring status (`None` before the first status response), and completed local conversations. Failed, cancelled, unfinished, or missed conversations do not appear as successful results. Local cancellation still propagates after cleanup and does not imply hosted cancellation.
 
 ## Optional traces

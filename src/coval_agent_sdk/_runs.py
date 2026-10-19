@@ -101,7 +101,7 @@ async def launch_and_run(
                 task.cancel()
             if unfinished:
                 await asyncio.gather(*unfinished, return_exceptions=True)
-    except errors.TunnelError as exception:
+    except errors.CovalError as exception:
         if state.run_id is None:
             raise
         raise errors.RunError(
@@ -158,14 +158,9 @@ async def _launch_and_run(
         await _attach_simulations(
             api, run_id, deadline, agent_factory, trace_exporter, seen, active
         )
-        for simulation_id, task in active.items():
-            if not task.done():
-                continue
-            failure = task.exception()
-            if failure is not None:
-                raise errors.TunnelError(
-                    f"Voice session {simulation_id} failed: {failure}"
-                ) from failure
+        for task in active.values():
+            if task.done():
+                task.result()
         run_response = await _get_monitoring_resource(
             api, f"runs/{parse.quote(run_id, safe='')}", run_deadline=deadline
         )
@@ -194,16 +189,8 @@ async def _launch_and_run(
             f"conversation(s) finish before the SDK "
             f"attached."
         )
-    failures: list[str] = []
-    for simulation_id, task in active.items():
-        try:
-            await task
-        except Exception as exception:
-            failures.append(f"{simulation_id}: {exception}")
-    if failures:
-        raise errors.TunnelError(
-            "Voice sessions failed: " + "; ".join(failures)
-        )
+    for task in active.values():
+        await task
     if run_status != "COMPLETED":
         raise errors.TunnelError(
             f"Run {run_id} finished with status {run_status}."

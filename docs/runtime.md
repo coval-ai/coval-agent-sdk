@@ -8,7 +8,7 @@ The Python client receives a factory taking a simulation ID. Each local conversa
 
 `on_ready()` and `on_audio()` must return promptly. Put slow ASR, model, or TTS work into separately owned tasks and bounded queues. The receive loop cannot read the next frame while a callback is awaiting remote work. Streaming adapters yield output independently; callback adapters may return a greeting or reply directly.
 
-The session cancels and awaits its output task before closing the adapter. The adapter's `close()` method must cancel and await its own provider/pipeline tasks and finish conversation spans. Session or adapter errors propagate after cleanup. A secondary cleanup error must not hide the primary failure.
+The session cancels and awaits its output task before closing the adapter. The adapter's `close()` method must cancel and await its own provider/pipeline tasks and finish conversation spans. All SDK-owned failures derive from `CovalError`. Adapter exceptions and cancellation propagate unchanged after cleanup through both `connect()` and `run()`; only SDK failures receive a `RunError` snapshot after launch. A secondary cleanup error must not hide the primary failure.
 
 ## Audio and backpressure
 

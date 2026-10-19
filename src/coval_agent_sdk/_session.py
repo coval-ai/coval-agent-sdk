@@ -30,6 +30,22 @@ def _add_cleanup_note(exception: BaseException, note: str) -> None:
         add_note(note)
 
 
+def _discard_trace(
+    exporter: telemetry.TraceExporter,
+    simulation_id: str,
+    primary_error: BaseException | None,
+) -> None:
+    """Discard failed-session traces without replacing the primary failure."""
+    try:
+        exporter.discard(simulation_id=simulation_id)
+    except BaseException as exception:
+        if primary_error is None:
+            raise
+        _add_cleanup_note(
+            primary_error, f"Trace discard also failed: {exception!r}"
+        )
+
+
 async def run_session(
     api: _http.CovalApi,
     simulation_id: str,
@@ -273,8 +289,12 @@ class _Session:
                     cleanup_error = exception
             finally:
                 if not self._completed:
-                    self._trace_exporter.discard(
-                        simulation_id=self._simulation_id
+                    _discard_trace(
+                        self._trace_exporter,
+                        self._simulation_id,
+                        session_error
+                        if session_error is not None
+                        else cleanup_error,
                     )
         if cleanup_error is not None:
             raise cleanup_error

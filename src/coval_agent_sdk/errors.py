@@ -5,7 +5,11 @@ from __future__ import annotations
 from coval_agent_sdk import results
 
 
-class TunnelError(RuntimeError):
+class CovalError(RuntimeError):
+    """Base for SDK-owned failures; excludes adapter errors and cancellation."""
+
+
+class TunnelError(CovalError):
     """The Coval API or relay could not complete a voice session."""
 
 
@@ -49,5 +53,5 @@ class RunError(TunnelError):
         self.result = result
 
 
-class CovalTraceError(RuntimeError):
+class CovalTraceError(CovalError):
     """A conversation trace could not be prepared or uploaded."""

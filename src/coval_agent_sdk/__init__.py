@@ -5,6 +5,7 @@ from coval_agent_sdk.agent import VoiceAgent
 from coval_agent_sdk.client import CovalVoiceClient
 from coval_agent_sdk.config import RunConfig
 from coval_agent_sdk.errors import CovalConnectionError
+from coval_agent_sdk.errors import CovalError
 from coval_agent_sdk.errors import CovalHttpError
 from coval_agent_sdk.errors import CovalTraceError
 from coval_agent_sdk.errors import RunError
@@ -16,6 +17,7 @@ from coval_agent_sdk.telemetry import TraceExporter
 
 __all__ = [
     "CovalConnectionError",
+    "CovalError",
     "CovalHttpError",
     "CovalTraceError",
     "CovalVoiceClient",
