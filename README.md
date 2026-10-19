@@ -97,7 +97,7 @@ from coval_agent_sdk import tracing
 exporter = tracing.CovalTraceExporter()
 ```
 
-Register it with your pipeline's OpenTelemetry setup, and pass the same exporter to `CovalVoiceClient(trace_exporter=...)`. Set the pipeline's conversation identifier to the simulation ID received by the agent factory. The SDK flushes ended spans and uploads each completed conversation separately.
+Register it with your pipeline's OpenTelemetry setup, and pass the same exporter to `CovalVoiceClient(trace_exporter=...)`. Use a root span named `conversation` whose `conversation.id` attribute is the simulation ID received by the agent factory. The SDK flushes ended spans and uploads each completed conversation separately.
 
 Spans may contain prompts, transcripts, and model output. Enable upload only for data you intend to send to Coval. Failed-session traces are discarded after cleanup; a failed upload after a completed voice session is returned in `SessionResult.trace.error` and can be retried through the retained exporter. See [trace lifecycle](docs/runtime.md#trace-lifecycle) for buffer limits and failure semantics.
 

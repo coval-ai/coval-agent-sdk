@@ -97,6 +97,133 @@ class Socket:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("phase", ["ready", "audio"])
+@pytest.mark.parametrize("output", ["xx", [1, 2], b"\x00"])
+async def test_callback_output_is_validated_before_sending(
+    monkeypatch, phase, output
+):
+    class Agent:
+        closed = False
+
+        async def on_ready(self):
+            return output if phase == "ready" else None
+
+        async def on_audio(self, audio):
+            return output
+
+        async def close(self):
+            self.closed = True
+
+    agent, socket = Agent(), Socket()
+    socket.messages.put_nowait(READY)
+    socket.messages.put_nowait(b"\x01\x00" * 320)
+    monkeypatch.setattr(
+        _connection,
+        "open_voice_connection",
+        mock.AsyncMock(return_value=socket),
+    )
+    with pytest.raises(coval_agent_sdk.CovalError, match="PCM16"):
+        await asyncio.wait_for(
+            coval_agent_sdk.CovalVoiceClient(api_key="synthetic").connect(
+                "simulation-a", lambda _: agent
+            ),
+            2,
+        )
+    assert not any(isinstance(message, bytes) for message in socket.sent)
+    assert not any(message == output for message in socket.sent)
+    assert agent.closed
+    assert socket.closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("messages", "diagnostic", "ready_count"),
+    [
+        (["{"], "invalid control JSON", 0),
+        (["[]"], "invalid control JSON", 0),
+        ([READY, "{"], "invalid control JSON", 1),
+        (['{"type":"session_end"}'], "before session_ready", 0),
+        ([READY, READY], "repeated session_ready", 1),
+    ],
+)
+async def test_invalid_control_sequence_never_reports_success(
+    monkeypatch, messages, diagnostic, ready_count
+):
+    class Agent(StreamingAgent):
+        ready_calls = 0
+
+        async def on_ready(self):
+            self.ready_calls += 1
+            await super().on_ready()
+
+    agent, socket = Agent(), Socket()
+    for message in messages:
+        socket.messages.put_nowait(message)
+    exporter = mock.Mock()
+    exporter.flush.return_value = True
+    monkeypatch.setattr(
+        _connection,
+        "open_voice_connection",
+        mock.AsyncMock(return_value=socket),
+    )
+    with pytest.raises(coval_agent_sdk.CovalError, match=diagnostic):
+        await asyncio.wait_for(
+            coval_agent_sdk.CovalVoiceClient(
+                api_key="synthetic", trace_exporter=exporter
+            ).connect("simulation-a", lambda _: agent),
+            2,
+        )
+    assert agent.ready_calls == ready_count
+    assert agent.closed
+    assert socket.closed
+    exporter.upload.assert_not_called()
+    exporter.discard.assert_called_once_with(simulation_id="simulation-a")
+
+
+@pytest.mark.asyncio
+async def test_stream_close_preserves_original_output_failure(monkeypatch):
+    original = RuntimeError("output failed")
+
+    class Stream:
+        closed = False
+
+        def __aiter__(self):
+            return self
+
+        async def __anext__(self):
+            raise original
+
+        async def aclose(self):
+            self.closed = True
+            raise RuntimeError("iterator cleanup failed")
+
+    stream = Stream()
+
+    class Agent(StreamingAgent):
+        def audio_output(self):
+            return stream
+
+    agent, socket = Agent(), Socket()
+    socket.messages.put_nowait(READY)
+    monkeypatch.setattr(
+        _connection,
+        "open_voice_connection",
+        mock.AsyncMock(return_value=socket),
+    )
+    with pytest.raises(RuntimeError) as failure:
+        await asyncio.wait_for(
+            coval_agent_sdk.CovalVoiceClient(api_key="synthetic").connect(
+                "simulation-a", lambda _: agent
+            ),
+            2,
+        )
+    assert failure.value is original
+    assert stream.closed
+    assert agent.closed
+    assert socket.closed
+
+
+@pytest.mark.asyncio
 async def test_greeting_and_reply_stream_during_input_silence_and_close(
     monkeypatch,
 ):
@@ -134,8 +261,9 @@ async def test_greeting_and_reply_stream_during_input_silence_and_close(
 
 
 @pytest.mark.asyncio
-async def test_back_to_back_stream_chunks_retain_the_audio_pacing_budget(
-    monkeypatch,
+@pytest.mark.parametrize("mode", ["streaming", "callback"])
+async def test_back_to_back_agent_chunks_retain_the_audio_pacing_budget(
+    monkeypatch, mode
 ):
     clock = [10.0]
     sent_at = []
@@ -161,12 +289,28 @@ async def test_back_to_back_stream_chunks_retain_the_audio_pacing_budget(
 
     class TimedSocket(Socket):
         async def send(self, message):
-            sent_at.append(clock[0])
+            if isinstance(message, bytes):
+                sent_at.append(clock[0])
             await super().send(message)
 
     socket = TimedSocket()
     socket.messages.put_nowait(READY)
-    agent = BurstAgent()
+
+    class CallbackAgent:
+        closed = False
+
+        async def on_ready(self):
+            return GREETING
+
+        async def on_audio(self, audio):
+            return REPLY
+
+        async def close(self):
+            self.closed = True
+
+    if mode == "callback":
+        socket.messages.put_nowait(b"\x00\x00" * 320)
+    agent = BurstAgent() if mode == "streaming" else CallbackAgent()
     monkeypatch.setattr(
         _connection,
         "open_voice_connection",
@@ -179,7 +323,10 @@ async def test_back_to_back_stream_chunks_retain_the_audio_pacing_budget(
     )
     try:
         await asyncio.wait_for(socket.reply_sent.wait(), 1)
-        assert socket.sent == [GREETING, REPLY]
+        assert [m for m in socket.sent if isinstance(m, bytes)] == [
+            GREETING,
+            REPLY,
+        ]
         assert sent_at[1] - sent_at[0] == pytest.approx(0.02)
         socket.messages.put_nowait('{"type":"session_end"}')
         await asyncio.wait_for(session, 1)
@@ -312,12 +459,8 @@ async def test_missing_terminal_frame_confirms_completion_and_uploads(
     span = provider.get_tracer(__name__).start_span(
         "conversation", attributes={"conversation.id": "simulation-a"}
     )
-    sink = mock.Mock()
-    sink.export.return_value = trace_export.SpanExportResult.SUCCESS
-    constructor = mock.Mock(return_value=sink)
-    monkeypatch.setattr(
-        tracing.otlp_trace_exporter, "OTLPSpanExporter", constructor
-    )
+    upload = mock.Mock()
+    monkeypatch.setattr(tracing, "_upload_spans", upload)
     monkeypatch.setattr(tracing.trace, "get_tracer_provider", lambda: provider)
     monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
     monkeypatch.setattr(
@@ -366,14 +509,10 @@ async def test_missing_terminal_frame_confirms_completion_and_uploads(
         for url, headers in requests:
             assert url.endswith("/simulations/simulation-a")
             assert headers["X-Coval-Workspace-Id"] == "workspace-a"
-        assert (
-            constructor.call_args.kwargs["headers"]["X-Coval-Workspace-Id"]
-            == "workspace-a"
-        )
-        assert [span.name for span in sink.export.call_args.args[0]] == [
+        assert upload.call_args.kwargs["workspace_id"] == "workspace-a"
+        assert [span.name for span in upload.call_args.args[0]] == [
             "conversation"
         ]
-        sink.shutdown.assert_called_once()
     finally:
         session.cancel()
         await asyncio.gather(session, return_exceptions=True)

@@ -68,7 +68,7 @@ Keep `coval-sdk` and its HTTP dependency inside the private `_http.py` adapter. 
 
 Derive SDK-owned failures from `CovalError` and retain useful specific subclasses. Do not wrap adapter exceptions or cancellation as SDK errors. Preserve the original failure through session cleanup and batch sibling cancellation; attach `RunError` snapshots only to SDK failures after launch. Completed-session trace delivery failures remain structured diagnostics.
 
-Put optional integration dependencies in a named extra and declare every external package imported directly by that integration. Keep the base SDK importable and runnable without those dependencies. OpenTelemetry belongs only in `coval_agent_sdk.tracing`; core code uses the dependency-free `TraceExporter` contract. `scripts/check` first exercises a clean base wheel installation, then installs `[tracing]` and runs the full suite.
+Put optional integration dependencies in a named extra and declare every external package imported directly by that integration. Keep the base SDK importable and runnable without those dependencies. OpenTelemetry belongs only in `coval_agent_sdk.tracing`; use its protobuf encoder with the private HTTP adapter rather than an exporter that emits logs or hides retry policy. core code uses the dependency-free `TraceExporter` contract. `scripts/check` first exercises a clean base wheel installation, then installs `[tracing]` and runs the full suite.
 
 For a new dependency, explain why the SDK needs it, its Python support, and its distribution/license implications. Update the affected tests and package metadata. Review dependency upgrades as code changes; do not relax constraints solely to silence a failing check.
 

@@ -11,8 +11,10 @@ from unittest import mock
 import urllib3
 from urllib3 import exceptions as http_exceptions
 from urllib3 import response as http_response
+from websockets import datastructures
 from websockets import exceptions
 from websockets import frames
+from websockets import http11
 
 from coval_agent_sdk import _audio
 from coval_agent_sdk import _connection
@@ -307,6 +309,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         received_simulation_ids = []
         agent = mock.Mock()
         agent.close = mock.AsyncMock()
+        agent.on_ready = mock.AsyncMock(return_value=None)
 
         def create_agent(simulation_id: str):
             received_simulation_ids.append(simulation_id)
@@ -314,6 +317,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
 
         class EndingSocket(SocketContext):
             async def __aiter__(self):
+                yield SESSION_READY
                 yield '{"type":"session_end"}'
 
         client = voice_client.CovalVoiceClient(api_key="test-key")
@@ -564,7 +568,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 assert acknowledgements == [2, 4]
                 yield '{"type":"session_end"}'
 
-        async def held_send(websocket, audio) -> None:
+        async def held_send(websocket, audio, *, next_send_at=None) -> None:
             sending.set()
             try:
                 await asyncio.Event().wait()
@@ -626,12 +630,16 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         self,
     ) -> None:
         class ClosingAgent:
+            async def on_ready(self) -> None:
+                return None
+
             async def close(self) -> None:
                 if cleanup_failure:
                     raise RuntimeError("agent cleanup failed")
 
         class EndingSocket(SocketContext):
             async def __aiter__(self):
+                yield SESSION_READY
                 yield '{"type":"session_end"}'
 
         async def ready_offer(api, simulation_id):
@@ -730,38 +738,81 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 expires_at=TOKEN_EXPIRES_AT_EPOCH_SECONDS,
             )
 
-        connection = mock.AsyncMock()
-        connector = mock.AsyncMock(
-            side_effect=[OSError("transient network failure"), connection]
-        )
-        discover = mock.AsyncMock(side_effect=ready_offer)
-        with (
-            mock.patch.object(_connection, "wait_for_offer", discover),
-            mock.patch.object(_connection.client, "connect", connector),
-            mock.patch.object(asyncio, "sleep", new=mock.AsyncMock()),
-        ):
-            opened = await _connection.open_voice_connection(
-                mock.Mock(), "simulation-1"
+        interrupted = exceptions.InvalidMessage("connection ended")
+        interrupted.__cause__ = EOFError()
+        failures = [OSError("network"), asyncio.TimeoutError(), interrupted]
+        failures.extend(
+            exceptions.InvalidStatus(
+                http11.Response(status, "temporary", datastructures.Headers())
             )
+            for status in (500, 502, 503, 504)
+        )
+        for failure in failures:
+            with self.subTest(failure=failure):
+                connection = mock.AsyncMock()
+                connector = mock.AsyncMock(side_effect=[failure, connection])
+                discover = mock.AsyncMock(side_effect=ready_offer)
+                with (
+                    mock.patch.object(_connection, "wait_for_offer", discover),
+                    mock.patch.object(_connection.client, "connect", connector),
+                    mock.patch.object(asyncio, "sleep", new=mock.AsyncMock()),
+                ):
+                    opened = await _connection.open_voice_connection(
+                        mock.Mock(), "simulation-1"
+                    )
 
-        self.assertIs(opened, connection)
-        self.assertEqual(connector.await_count, 2)
-        self.assertEqual(
-            connector.await_args.kwargs["ping_interval"],
-            _defaults.WEBSOCKET_PING_INTERVAL_SECONDS,
-        )
-        self.assertEqual(
-            connector.await_args.kwargs["ping_timeout"],
-            _defaults.WEBSOCKET_PING_TIMEOUT_SECONDS,
-        )
-        self.assertEqual(discover.await_count, 1)
-        self.assertEqual(
-            [
-                call.kwargs["additional_headers"]
-                for call in connector.await_args_list
-            ],
-            [{"Authorization": "Bearer test-token"}] * 2,
-        )
+                self.assertIs(opened, connection)
+                self.assertEqual(connector.await_count, 2)
+                self.assertEqual(
+                    connector.await_args.kwargs["ping_interval"],
+                    _defaults.WEBSOCKET_PING_INTERVAL_SECONDS,
+                )
+                self.assertEqual(
+                    connector.await_args.kwargs["ping_timeout"],
+                    _defaults.WEBSOCKET_PING_TIMEOUT_SECONDS,
+                )
+                self.assertEqual(discover.await_count, 1)
+                self.assertEqual(
+                    [
+                        call.kwargs["additional_headers"]
+                        for call in connector.await_args_list
+                    ],
+                    [{"Authorization": "Bearer test-token"}] * 2,
+                )
+
+    async def test_permanent_handshake_failure_is_not_retried(self) -> None:
+        failures = [
+            exceptions.InvalidStatus(
+                http11.Response(status, "rejected", datastructures.Headers())
+            )
+            for status in (400, 401, 403, 429)
+        ]
+        failures.append(exceptions.InvalidHandshake("invalid response"))
+        for failure in failures:
+            with self.subTest(failure=failure):
+                discover = mock.AsyncMock(
+                    return_value=_connection.ConnectionOffer(
+                        wss_url="wss://relay.example.test",
+                        token="synthetic-token",
+                        expires_at=TOKEN_EXPIRES_AT_EPOCH_SECONDS,
+                    )
+                )
+                connector = mock.AsyncMock(side_effect=[failure, mock.Mock()])
+                with (
+                    mock.patch.object(_connection, "wait_for_offer", discover),
+                    mock.patch.object(_connection.client, "connect", connector),
+                    mock.patch.object(
+                        asyncio, "sleep", new=mock.AsyncMock()
+                    ) as sleep,
+                    self.assertRaises(errors.TunnelError) as raised,
+                ):
+                    await _connection.open_voice_connection(
+                        mock.Mock(), "simulation-1"
+                    )
+                self.assertIs(raised.exception.__cause__, failure)
+                connector.assert_awaited_once()
+                discover.assert_awaited_once()
+                sleep.assert_not_awaited()
 
     async def test_socket_close_without_session_end_is_failure(self) -> None:
         class ClosingAgent:
@@ -862,7 +913,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertTrue(waiting_cancelled.is_set())
 
-    async def test_completed_conversation_missed_before_attachment_is_failure(
+    async def test_unattached_conversation_is_failure(
         self,
     ) -> None:
         class CompletedApi(FakeApi):
@@ -885,14 +936,20 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         config = run_config.RunConfig(
             agent_id="agent-1", persona_id="persona-1", test_set_id="test-set-1"
         )
-        for terminal_status in ("COMPLETED", "SKIPPED", "DELETED"):
+        for terminal_status in (
+            "COMPLETED",
+            "SKIPPED",
+            "DELETED",
+            "PENDING",
+            "IN QUEUE",
+        ):
             with self.subTest(terminal_status=terminal_status):
                 run_session = mock.AsyncMock()
                 with (
                     mock.patch.object(_session, "run_session", run_session),
                     self.assertRaisesRegex(
                         errors.TunnelError,
-                        ("1 conversation.*finish before the SDK attached"),
+                        ("1 conversation.*not attached before the run ended"),
                     ),
                 ):
                     await _runs.launch_and_run(

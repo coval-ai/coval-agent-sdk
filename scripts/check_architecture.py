@@ -11,16 +11,18 @@ import sys
 # set.
 _DEPENDENCIES: dict[str, set[str]] = {
     "_defaults": set(),
+    "_exceptions": set(),
     "errors": {"results"},
     "results": set(),
     "agent": set(),
     "config": {"_defaults"},
     "telemetry": set(),
-    "tracing": {"errors"},
+    "tracing": {"_http", "errors"},
     "_http": {"_defaults", "errors"},
     "_connection": {"_defaults", "_http", "errors"},
-    "_audio": {"_defaults", "agent", "errors"},
+    "_audio": {"_defaults", "_exceptions", "agent", "errors"},
     "_session": {
+        "_exceptions",
         "_audio",
         "_connection",
         "_defaults",

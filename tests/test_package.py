@@ -130,6 +130,6 @@ def test_opentelemetry_dependencies_belong_only_to_tracing_extra():
         "websockets",
         "opentelemetry-api",
         "opentelemetry-sdk",
-        "opentelemetry-exporter-otlp-proto-http",
+        "opentelemetry-exporter-otlp-proto-common",
     }
     assert "tracing" in package.metadata.get_all("Provides-Extra")

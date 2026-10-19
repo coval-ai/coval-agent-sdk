@@ -9,12 +9,16 @@ from unittest import mock
 from urllib import parse
 
 from coval_sdk import exceptions as api_exceptions
+from opentelemetry import trace
+from opentelemetry.proto.collector.trace.v1 import trace_service_pb2
+from opentelemetry.sdk import trace as sdk_trace
 import pytest
 import urllib3
 from urllib3 import exceptions as http_exceptions
 
 import coval_agent_sdk
 from coval_agent_sdk import _http
+from coval_agent_sdk import tracing
 
 
 @pytest.fixture
@@ -58,6 +62,57 @@ def endpoint():
         http.shutdown()
         thread.join(timeout=2)
         http.server_close()
+
+
+@pytest.mark.parametrize("status", [200, 400, 503])
+def test_real_trace_request_encodes_otlp_and_stays_silent(
+    endpoint, caplog, capsys, status
+):
+    url, requests, reply = endpoint
+    reply["status"] = status
+    collector = tracing.CovalTraceExporter()
+    span = sdk_trace.ReadableSpan(
+        name="conversation",
+        context=trace.SpanContext(trace_id=1, span_id=2, is_remote=False),
+        attributes={"conversation.id": "simulation-a"},
+        start_time=1,
+        end_time=2,
+    )
+    collector.export([span])
+    options = {
+        "simulation_id": "simulation-a",
+        "api_base_url": url,
+        "api_key": "synthetic-key",
+        "workspace_id": "workspace-a",
+    }
+    if status == 200:
+        assert collector.upload(**options) == 1
+    else:
+        with pytest.raises(coval_agent_sdk.CovalTraceError, match=str(status)):
+            collector.upload(**options)
+        assert collector._buffered_span_count == 1
+    assert len(requests) == 1
+    method, path, headers, body = requests[0]
+    assert (method, path) == ("POST", "/v1/traces")
+    headers = {key.lower(): value for key, value in headers.items()}
+    assert headers["content-type"] == "application/x-protobuf"
+    assert headers["x-api-key"] == "synthetic-key"
+    assert headers["x-coval-workspace-id"] == "workspace-a"
+    assert headers["x-simulation-id"] == "simulation-a"
+    decoded = trace_service_pb2.ExportTraceServiceRequest.FromString(body)
+    encoded = decoded.resource_spans[0].scope_spans[0].spans
+    assert len(encoded) == 1
+    assert encoded[0].name == "conversation"
+    assert encoded[0].trace_id == (1).to_bytes(16, "big")
+    assert encoded[0].span_id == (2).to_bytes(8, "big")
+    assert capsys.readouterr() == ("", "")
+    assert caplog.records == []
+    if status != 200:
+        reply["status"] = 200
+        assert collector.upload(**options) == 1
+        assert len(requests) == 2
+        assert requests[1][3] == body
+    assert collector._buffered_span_count == 0
 
 
 @pytest.mark.asyncio

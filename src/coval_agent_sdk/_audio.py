@@ -8,6 +8,7 @@ import time
 from websockets.asyncio import client
 
 from coval_agent_sdk import _defaults
+from coval_agent_sdk import _exceptions
 from coval_agent_sdk import agent as agent_contract
 from coval_agent_sdk import errors
 
@@ -87,6 +88,7 @@ class OutputAudio:
         Raises:
             errors.TunnelError: The byte or reply-count budget is exhausted.
         """
+        audio = _validate_chunk(audio)
         if (
             self._pending_reply_bytes + len(audio)
             > _defaults.MAX_PENDING_REPLY_BYTES
@@ -101,9 +103,12 @@ class OutputAudio:
         self._replies.put_nowait(audio)
 
     async def _send_replies(self, websocket: client.ClientConnection) -> None:
+        next_send_at: float | None = None
         while True:
             audio = await self._replies.get()
-            await send_paced_audio(websocket, audio)
+            next_send_at = await send_paced_audio(
+                websocket, audio, next_send_at=next_send_at
+            )
             self.sent_pcm_bytes += len(audio)
             self._pending_reply_bytes -= len(audio)
 
@@ -112,6 +117,7 @@ class OutputAudio:
             raise TypeError("Streaming audio requires a StreamingVoiceAgent.")
         stream = self._agent.audio_output()
         next_send_at: float | None = None
+        primary_error: BaseException | None = None
         try:
             async for chunk in stream:
                 audio = _validate_chunk(chunk)
@@ -131,10 +137,21 @@ class OutputAudio:
                 f"Simulation {self._simulation_id} agent "
                 f"audio stream ended before session_end."
             )
+        except BaseException as exception:
+            primary_error = exception
+            raise
         finally:
             close_stream = getattr(stream, "aclose", None)
             if close_stream is not None:
-                await close_stream()
+                try:
+                    await close_stream()
+                except BaseException as exception:
+                    if primary_error is None:
+                        raise
+                    _exceptions.add_cleanup_note(
+                        primary_error,
+                        f"Audio stream cleanup also failed: {exception!r}",
+                    )
 
     async def send(
         self, websocket: client.ClientConnection, ready: asyncio.Event

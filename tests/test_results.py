@@ -3,6 +3,7 @@
 import asyncio
 import dataclasses
 import json
+import types
 from unittest import mock
 
 import pytest
@@ -10,6 +11,7 @@ import pytest
 import coval_agent_sdk
 from coval_agent_sdk import _connection
 from coval_agent_sdk import _defaults
+from coval_agent_sdk import _runs
 from coval_agent_sdk import _session
 from coval_agent_sdk import errors
 
@@ -25,6 +27,90 @@ READY = json.dumps(
 )
 INPUT = b"\x01\x00" * 320
 OUTPUT = b"\x02\x00" * 320
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("queued_status", ["PENDING", "IN QUEUE"])
+async def test_run_defers_queued_agents_within_the_batch_deadline(
+    monkeypatch, queued_status
+):
+    clock = [0.0]
+    listing_count = 0
+    created_at = []
+    agent = Agent()
+
+    class ReadySocket(Socket):
+        async def __aiter__(self):
+            yield READY
+            await asyncio.sleep(0)
+            yield '{"type":"session_end"}'
+
+    socket = ReadySocket()
+
+    def factory(simulation_id):
+        assert simulation_id == "conversation-a"
+        created_at.append(clock[0])
+        return agent
+
+    async def read(path, *, query=None):
+        nonlocal listing_count
+        await asyncio.sleep(0)
+        if path == "simulations":
+            listing_count += 1
+            if listing_count == 2:
+                assert created_at == []
+                clock[0] = _defaults.CONNECT_WAIT_SECONDS + 1
+            return {
+                "simulations": [
+                    {
+                        "simulation_id": "conversation-a",
+                        "status": queued_status
+                        if listing_count == 1
+                        else "IN PROGRESS",
+                    }
+                ]
+            }
+        return {
+            "run": {
+                "status": "IN PROGRESS" if listing_count == 1 else "COMPLETED"
+            }
+        }
+
+    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
+    monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
+    monkeypatch.setattr(
+        _runs, "time", types.SimpleNamespace(monotonic=lambda: clock[0])
+    )
+    monkeypatch.setattr(
+        _connection,
+        "open_voice_connection",
+        mock.AsyncMock(return_value=socket),
+    )
+    monkeypatch.setattr(
+        client._api,
+        "post",
+        mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
+    )
+    monkeypatch.setattr(client._api, "get", read)
+    result = await asyncio.wait_for(
+        client.run(
+            coval_agent_sdk.RunConfig(
+                "agent-a",
+                "persona-a",
+                "test-set-a",
+                run_timeout_seconds=_defaults.CONNECT_WAIT_SECONDS * 2,
+            ),
+            factory,
+        ),
+        2,
+    )
+    assert created_at == [_defaults.CONNECT_WAIT_SECONDS + 1]
+    assert result.run_id == "run-a"
+    assert result.conversations == (
+        coval_agent_sdk.SessionResult("conversation-a", 0, 0),
+    )
+    assert agent.closed
+    assert socket.closed
 
 
 class Agent:

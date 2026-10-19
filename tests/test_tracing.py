@@ -47,13 +47,11 @@ class TraceExporterTest(unittest.TestCase):
             ):
                 pass
 
-        otlp_exporter = mock.Mock()
-        otlp_exporter.export.return_value = (
-            trace_export.SpanExportResult.SUCCESS
-        )
+        upload = mock.Mock()
+        upload.return_value = None
         with mock.patch(
-            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
-            return_value=otlp_exporter,
+            "coval_agent_sdk.tracing._upload_spans",
+            new=upload,
         ) as factory:
             uploaded_count = collector.upload(
                 simulation_id="simulation-a",
@@ -69,27 +67,25 @@ class TraceExporterTest(unittest.TestCase):
 
         self.assertEqual(uploaded_count, 2)
         self.assertEqual(
-            factory.call_args_list[0].kwargs["headers"]["X-Coval-Workspace-Id"],
+            factory.call_args_list[0].kwargs["workspace_id"],
             "workspace-a",
         )
-        self.assertNotIn(
-            "X-Coval-Workspace-Id", factory.call_args_list[1].kwargs["headers"]
-        )
-        sent_spans = otlp_exporter.export.call_args_list[0].args[0]
+        self.assertIsNone(factory.call_args_list[1].kwargs["workspace_id"])
+        sent_spans = upload.call_args_list[0].args[0]
         self.assertEqual(
             {span.name for span in sent_spans}, {"conversation", "stt"}
         )
         self.assertEqual(len({span.context.trace_id for span in sent_spans}), 1)
         self.assertEqual(
-            factory.call_args_list[0].kwargs["headers"]["X-Simulation-Id"],
+            factory.call_args_list[0].kwargs["simulation_id"],
             "simulation-a",
         )
         self.assertEqual(remaining_count, 2)
         self.assertEqual(
-            factory.call_args.kwargs["headers"]["X-Simulation-Id"],
+            factory.call_args.kwargs["simulation_id"],
             "simulation-b",
         )
-        second_spans = otlp_exporter.export.call_args_list[1].args[0]
+        second_spans = upload.call_args_list[1].args[0]
         self.assertNotEqual(
             sent_spans[0].context.trace_id, second_spans[0].context.trace_id
         )
@@ -104,20 +100,20 @@ class TraceExporterTest(unittest.TestCase):
         collector.export([root])
         batches = []
 
-        def export_during_upload(spans) -> trace_export.SpanExportResult:
+        def export_during_upload(spans, **options) -> None:
             batches.append(spans)
             if len(batches) == 1:
                 self.assertEqual(
                     collector.export([late_span]),
                     trace_export.SpanExportResult.SUCCESS,
                 )
-            return trace_export.SpanExportResult.SUCCESS
+            return
 
-        otlp_exporter = mock.Mock()
-        otlp_exporter.export.side_effect = export_during_upload
+        upload = mock.Mock()
+        upload.side_effect = export_during_upload
         with mock.patch(
-            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
-            return_value=otlp_exporter,
+            "coval_agent_sdk.tracing._upload_spans",
+            new=upload,
         ):
             self.assertEqual(
                 collector.upload(
@@ -150,13 +146,11 @@ class TraceExporterTest(unittest.TestCase):
                     ),
                     trace_export.SpanExportResult.SUCCESS,
                 )
-                otlp_exporter = mock.Mock()
-                otlp_exporter.export.return_value = (
-                    trace_export.SpanExportResult.SUCCESS
-                )
+                upload = mock.Mock()
+                upload.return_value = None
                 with mock.patch(
-                    "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
-                    return_value=otlp_exporter,
+                    "coval_agent_sdk.tracing._upload_spans",
+                    new=upload,
                 ):
                     self.assertEqual(
                         collector.upload(
@@ -197,13 +191,11 @@ class TraceExporterTest(unittest.TestCase):
         )
         collector.discard(simulation_id="failed")
         self.assertEqual(collector._buffered_span_count, 1)
-        otlp_exporter = mock.Mock()
-        otlp_exporter.export.return_value = (
-            trace_export.SpanExportResult.SUCCESS
-        )
+        upload = mock.Mock()
+        upload.return_value = None
         with mock.patch(
-            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
-            return_value=otlp_exporter,
+            "coval_agent_sdk.tracing._upload_spans",
+            new=upload,
         ):
             self.assertEqual(
                 collector.upload(
@@ -230,20 +222,18 @@ class TraceExporterTest(unittest.TestCase):
         }
         with (
             mock.patch(
-                "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
+                "coval_agent_sdk.tracing._upload_spans",
                 side_effect=ValueError("bad URL"),
             ),
             self.assertRaisesRegex(errors.CovalTraceError, "bad URL"),
         ):
             collector.upload(**upload_options)
 
-        otlp_exporter = mock.Mock()
-        otlp_exporter.export.return_value = (
-            trace_export.SpanExportResult.SUCCESS
-        )
+        upload = mock.Mock()
+        upload.return_value = None
         with mock.patch(
-            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
-            return_value=otlp_exporter,
+            "coval_agent_sdk.tracing._upload_spans",
+            new=upload,
         ):
             self.assertEqual(collector.upload(**upload_options), 1)
 
@@ -279,13 +269,11 @@ class TraceExporterTest(unittest.TestCase):
         ):
             collector.upload(simulation_id="damaged", **upload_options)
 
-        otlp_exporter = mock.Mock()
-        otlp_exporter.export.return_value = (
-            trace_export.SpanExportResult.SUCCESS
-        )
+        upload = mock.Mock()
+        upload.return_value = None
         with mock.patch(
-            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
-            return_value=otlp_exporter,
+            "coval_agent_sdk.tracing._upload_spans",
+            new=upload,
         ):
             self.assertEqual(
                 collector.upload(simulation_id="unaffected", **upload_options),
@@ -306,7 +294,7 @@ class TraceExporterTest(unittest.TestCase):
                 collector.upload(simulation_id="subsequent", **upload_options),
                 1,
             )
-        self.assertEqual(otlp_exporter.export.call_count, 2)
+        self.assertEqual(upload.call_count, 2)
 
     def test_failed_upload_keeps_its_capacity_reserved_during_concurrent_export(
         self,
@@ -318,7 +306,7 @@ class TraceExporterTest(unittest.TestCase):
             [make_span(trace_id=uploading_trace_id, simulation_id="uploading")]
         )
 
-        def export_during_upload(spans) -> trace_export.SpanExportResult:
+        def export_during_upload(spans, **options) -> None:
             self.assertEqual(len(spans), 1)
             self.assertEqual(
                 collector.export(
@@ -333,17 +321,19 @@ class TraceExporterTest(unittest.TestCase):
                 ),
                 trace_export.SpanExportResult.FAILURE,
             )
-            return trace_export.SpanExportResult.FAILURE
+            raise errors.CovalTraceError(
+                "Coval could not receive traces for simulation uploading"
+            )
 
         upload_options = {
             "api_base_url": "https://api.coval.dev/v1",
             "api_key": "test-key",
         }
-        otlp_exporter = mock.Mock()
-        otlp_exporter.export.side_effect = export_during_upload
+        upload = mock.Mock()
+        upload.side_effect = export_during_upload
         with mock.patch(
-            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
-            return_value=otlp_exporter,
+            "coval_agent_sdk.tracing._upload_spans",
+            new=upload,
         ):
             with self.assertRaisesRegex(
                 errors.CovalTraceError,
@@ -355,10 +345,8 @@ class TraceExporterTest(unittest.TestCase):
                 "discarded spans for simulation concurrent",
             ):
                 collector.upload(simulation_id="concurrent", **upload_options)
-            otlp_exporter.export.side_effect = None
-            otlp_exporter.export.return_value = (
-                trace_export.SpanExportResult.SUCCESS
-            )
+            upload.side_effect = None
+            upload.return_value = None
             self.assertEqual(
                 collector.upload(simulation_id="uploading", **upload_options), 1
             )
@@ -387,13 +375,11 @@ class TraceExporterTest(unittest.TestCase):
             "api_base_url": "https://api.coval.dev/v1",
             "api_key": "test-key",
         }
-        otlp_exporter = mock.Mock()
-        otlp_exporter.export.return_value = (
-            trace_export.SpanExportResult.SUCCESS
-        )
+        upload = mock.Mock()
+        upload.return_value = None
         with mock.patch(
-            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
-            return_value=otlp_exporter,
+            "coval_agent_sdk.tracing._upload_spans",
+            new=upload,
         ):
             self.assertEqual(
                 collector.upload(simulation_id="retained", **upload_options), 1
@@ -447,13 +433,11 @@ class TraceExporterTest(unittest.TestCase):
             ),
             trace_export.SpanExportResult.SUCCESS,
         )
-        otlp_exporter = mock.Mock()
-        otlp_exporter.export.return_value = (
-            trace_export.SpanExportResult.SUCCESS
-        )
+        upload = mock.Mock()
+        upload.return_value = None
         with mock.patch(
-            "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
-            return_value=otlp_exporter,
+            "coval_agent_sdk.tracing._upload_spans",
+            new=upload,
         ):
             self.assertEqual(
                 collector.upload(

@@ -1,18 +1,18 @@
-"""Buffer Pipecat spans and upload one completed conversation to Coval."""
+"""Buffer spans and upload one completed conversation to Coval."""
+
+from __future__ import annotations
 
 from collections.abc import Sequence
-import contextlib
 import dataclasses
 import threading
 import time
 
 from opentelemetry import trace
-from opentelemetry.exporter.otlp.proto.http import (
-    trace_exporter as otlp_trace_exporter,
-)
+from opentelemetry.exporter.otlp.proto.common import trace_encoder
 from opentelemetry.sdk import trace as sdk_trace
 from opentelemetry.sdk.trace import export as trace_export
 
+from coval_agent_sdk import _http
 from coval_agent_sdk import errors
 
 DEFAULT_MAX_BUFFERED_SPANS = 10_000
@@ -34,8 +34,28 @@ class _TraceBuffer:
     latest_span_epoch_nanoseconds: int = 0
 
 
+def _upload_spans(
+    spans: Sequence[sdk_trace.ReadableSpan],
+    *,
+    simulation_id: str,
+    api_base_url: str,
+    api_key: str,
+    workspace_id: str | None,
+) -> None:
+    """Encode OTLP and send it through the private, silent HTTP transport."""
+    api = _http.CovalApi(
+        api_base_url=api_base_url,
+        api_key=api_key,
+        workspace_id=workspace_id,
+    )
+    payload = trace_encoder.encode_spans(spans).SerializeToString()
+    api.post_protobuf(
+        "traces", payload, headers={"X-Simulation-Id": simulation_id}
+    )
+
+
 class CovalTraceExporter(trace_export.SpanExporter):
-    """Collect process-wide spans and upload each Pipecat trace separately."""
+    """Collect process-wide spans and upload each conversation separately."""
 
     def __init__(
         self,
@@ -233,11 +253,10 @@ class CovalTraceExporter(trace_export.SpanExporter):
             ]
             if len(matching_trace_ids) != 1:
                 raise errors.CovalTraceError(
-                    f"Expected one completed Pipecat trace "
+                    f"Expected one completed conversation trace "
                     f"for simulation {simulation_id}, found "
-                    f"{len(matching_trace_ids)}. Set "
-                    f"PipelineWorker conversation_id to the "
-                    f"simulation ID."
+                    f"{len(matching_trace_ids)}. Set the conversation "
+                    f"root span's conversation.id to the simulation ID."
                 )
             trace_id = matching_trace_ids[0]
             buffer = self._traces[trace_id]
@@ -261,26 +280,16 @@ class CovalTraceExporter(trace_export.SpanExporter):
             # stays bounded.
             spans = tuple(buffer.spans)
 
-        exporter: otlp_trace_exporter.OTLPSpanExporter | None = None
         uploaded_count = 0
         try:
-            headers = {
-                "X-API-Key": api_key,
-                "X-Simulation-Id": simulation_id,
-            }
-            if workspace_id is not None:
-                headers["X-Coval-Workspace-Id"] = workspace_id
-            exporter = otlp_trace_exporter.OTLPSpanExporter(
-                endpoint=f"{api_base_url.rstrip('/')}/traces",
-                headers=headers,
-            )
             while spans:
-                result = exporter.export(spans)
-                if result != trace_export.SpanExportResult.SUCCESS:
-                    raise errors.CovalTraceError(
-                        f"Coval rejected or could not receive "
-                        f"traces for simulation {simulation_id}."
-                    )
+                _upload_spans(
+                    spans,
+                    simulation_id=simulation_id,
+                    api_base_url=api_base_url,
+                    api_key=api_key,
+                    workspace_id=workspace_id,
+                )
                 uploaded_count += len(spans)
                 spans = self._finish_upload(
                     trace_id, succeeded=True, uploaded_span_count=len(spans)
@@ -292,10 +301,6 @@ class CovalTraceExporter(trace_export.SpanExporter):
                 f"simulation {simulation_id}: "
                 f"{exception}"
             ) from exception
-        finally:
-            if exporter is not None:
-                with contextlib.suppress(Exception):
-                    exporter.shutdown()
         return uploaded_count
 
     def _finish_upload(

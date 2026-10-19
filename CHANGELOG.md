@@ -15,3 +15,6 @@ User-facing changes are recorded here. This project is in pre-release developmen
 - Optional OpenTelemetry dependencies through `[tracing]`, with a dependency-free core trace contract and the concrete exporter in `coval_agent_sdk.tracing`.
 - Internal use of `coval-sdk` behind a private HTTP adapter, with no public transport client or generated API types.
 - A shared `CovalError` base for SDK failures, preserving original adapter exceptions and cancellation through run/session cleanup.
+- Consistent callback/stream PCM validation and pacing, readiness-ordered completion, and preservation of output errors through iterator cleanup.
+- Silent, single-attempt OTLP protobuf delivery through the private Coval transport.
+- Batch attachment defers queued conversations until they start, preserving the batch deadline and rejecting unattached outcomes; permanent relay upgrades fail without retrying.

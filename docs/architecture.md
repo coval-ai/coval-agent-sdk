@@ -20,12 +20,13 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 | `_session.py` | One agent/socket session, readiness, input acknowledgements, and cleanup. |
 | `_runs.py` | Run launch, paginated conversation discovery, monitoring, and sibling cancellation. |
 | `_defaults.py` | Internal protocol limits and timeout defaults. |
+| `_exceptions.py` | Secondary cleanup diagnostics that preserve primary exception identity. |
 
 Paths without a directory prefix in this table are relative to `src/coval_agent_sdk/`. Modules beginning with `_` are implementation details; import the documented API from `coval_agent_sdk` in a consumer.
 
 ## Dependency direction
 
-Public client methods call run/session orchestration. Orchestration depends on connection, audio, and HTTP owners. Adapter contracts, configuration, errors, and defaults remain small leaf responsibilities. Core orchestration depends on the dependency-free `TraceExporter` protocol. Only the optional `tracing` module imports OpenTelemetry; it owns provider flushing, buffers, and HTTP export and does not import session orchestration. Import its concrete exporter from `coval_agent_sdk.tracing`, not the root facade. The architecture checker rejects OpenTelemetry imports outside that integration module.
+Public client methods call run/session orchestration. Orchestration depends on connection, audio, and HTTP owners. Adapter contracts, configuration, errors, and defaults remain small leaf responsibilities. Core orchestration depends on the dependency-free `TraceExporter` protocol. Only the optional `tracing` module imports OpenTelemetry; it owns provider flushing, buffers, and OTLP protobuf encoding and does not import session orchestration. Import its concrete exporter from `coval_agent_sdk.tracing`, not the root facade. The architecture checker rejects OpenTelemetry imports outside that integration module.
 
 Internal code imports owning modules rather than the root public facade. The root initializer is the only symbol-reexport facade. Do not introduce a cycle or move an import inside a function to hide one. `scripts/check_architecture.py` checks the allowed first-party dependency graph, top-level absolute imports, production dependency roots, and initializer contents.
 
@@ -35,7 +36,7 @@ A new module requires an explicit dependency policy in that checker. Choose its 
 
 Only `_http.py` imports `coval_sdk` and `urllib3`; the architecture checker enforces this boundary. The public client owns a private `_api` adapter. Public signatures, results, attributes, and exports contain no API SDK objects or types. Request failures become agent SDK errors rather than passing dependency exceptions to applications.
 
-The adapter uses the API SDK's request serialization and client methods because connection discovery is absent from its generated endpoint set. It validates JSON objects before orchestration consumes them. Each blocking request owns its API client and connection pool, which is cleared in the worker thread after success or failure. Cancellation stops waiting on that worker; the worker still releases its resources when the request finishes or times out. No shared SDK defaults or debug logging settings are modified.
+Tracing sends encoded protobuf through the same private adapter as JSON API requests, without the OpenTelemetry HTTP exporter's logging or automatic retry policy. The adapter uses the API SDK's request serialization and client methods because connection discovery is absent from its generated endpoint set. It validates JSON objects before orchestration consumes them. Each blocking request owns its API client and connection pool, which is cleared in the worker thread after success or failure. Cancellation stops waiting on that worker; the worker still releases its resources when the request finishes or times out. No shared SDK defaults or debug logging settings are modified.
 
 ## State and resources
 

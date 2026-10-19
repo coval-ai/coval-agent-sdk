@@ -8,8 +8,9 @@ from typing import Protocol
 class TraceExporter(Protocol):
     """Flush, upload, and discard traces without exposing provider types.
 
-    Implementations own their tracing provider and buffers. Blocking methods
+    Implementations own their tracing provider and buffers. Flush and upload
     run in worker threads during session cleanup, after the adapter has closed.
+    Discard must release local buffers promptly.
     """
 
     def flush(self, *, timeout_millis: int) -> bool:

@@ -16,18 +16,12 @@ from websockets.asyncio import client
 from coval_agent_sdk import _audio
 from coval_agent_sdk import _connection
 from coval_agent_sdk import _defaults
+from coval_agent_sdk import _exceptions
 from coval_agent_sdk import _http
 from coval_agent_sdk import agent as agent_contract
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
 from coval_agent_sdk import telemetry
-
-
-def _add_cleanup_note(exception: BaseException, note: str) -> None:
-    """Attach cleanup context on runtimes supporting exception notes."""
-    add_note = getattr(exception, "add_note", None)
-    if callable(add_note):
-        add_note(note)
 
 
 def _discard_trace(
@@ -41,7 +35,7 @@ def _discard_trace(
     except BaseException as exception:
         if primary_error is None:
             raise
-        _add_cleanup_note(
+        _exceptions.add_cleanup_note(
             primary_error, f"Trace discard also failed: {exception!r}"
         )
 
@@ -165,7 +159,13 @@ class _Session:
 
     async def _handle_control(self, message: str, ready: asyncio.Event) -> None:
         """Validate control messages before changing session state."""
-        control = json.loads(message)
+        try:
+            control = json.loads(message)
+        except json.JSONDecodeError:
+            raise errors.TunnelError(
+                f"Simulation {self._simulation_id} returned "
+                "invalid control JSON."
+            ) from None
         if not isinstance(control, dict):
             raise errors.TunnelError(
                 f"Simulation {self._simulation_id} returned "
@@ -174,6 +174,10 @@ class _Session:
         control = cast(dict[str, Any], control)
         message_type = control.get("type")
         if message_type == "session_ready":
+            if self._session_started:
+                raise errors.TunnelError(
+                    f"Simulation {self._simulation_id} repeated session_ready."
+                )
             audio_format = control.get("audio")
             expected_format = {
                 "encoding": "pcm_s16le",
@@ -193,6 +197,11 @@ class _Session:
             if greeting:
                 self._output.queue_reply(greeting)
         elif message_type == "session_end":
+            if not self._session_started:
+                raise errors.TunnelError(
+                    f"Simulation {self._simulation_id} ended "
+                    "before session_ready."
+                )
             self._completed = True
             return
         elif message_type == "error":
@@ -242,7 +251,7 @@ class _Session:
             await self._agent.close()
         except BaseException as exception:
             if session_error is not None:
-                _add_cleanup_note(
+                _exceptions.add_cleanup_note(
                     session_error, f"Agent cleanup also failed: {exception!r}"
                 )
             else:
@@ -275,7 +284,7 @@ class _Session:
                     else cleanup_error
                 )
                 if primary_error is not None:
-                    _add_cleanup_note(
+                    _exceptions.add_cleanup_note(
                         primary_error,
                         f"Trace cleanup also failed: {exception!r}",
                     )

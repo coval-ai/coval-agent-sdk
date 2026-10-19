@@ -186,8 +186,7 @@ async def _launch_and_run(
         raise errors.TunnelError(
             f"Run {run_id} had "
             f"{len(seen) - len(active)} "
-            f"conversation(s) finish before the SDK "
-            f"attached."
+            f"conversation(s) that were not attached before the run ended."
         )
     for task in active.values():
         await task
@@ -228,12 +227,12 @@ async def _attach_simulations(
         )
         for simulation in listing.get("simulations", []):
             simulation_id = simulation.get("simulation_id")
-            if not isinstance(simulation_id, str) or simulation_id in seen:
+            if not isinstance(simulation_id, str) or simulation_id in active:
                 continue
             seen.add(simulation_id)
-            if (
-                simulation.get("status")
-                in _defaults.TERMINAL_SIMULATION_STATUSES
+            if simulation.get("status") in (
+                _defaults.TERMINAL_SIMULATION_STATUSES
+                | _defaults.QUEUED_SIMULATION_STATUSES
             ):
                 continue
             active[simulation_id] = asyncio.create_task(

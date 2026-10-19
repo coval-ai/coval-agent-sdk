@@ -137,10 +137,15 @@ async def open_voice_connection(
                     * 10,
                 )
             except (
+                EOFError,
                 OSError,
-                TimeoutError,
+                asyncio.TimeoutError,
                 exceptions.WebSocketException,
             ) as exception:
+                if client.process_exception(exception) is not None:
+                    raise errors.TunnelError(
+                        f"Simulation {simulation_id} relay upgrade failed."
+                    ) from exception
                 last_error = exception
                 remaining_seconds = min(
                     offer.expires_at - time.time(), deadline - time.monotonic()
