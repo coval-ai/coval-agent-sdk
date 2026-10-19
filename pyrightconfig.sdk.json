@@ -1,0 +1,6 @@
+{
+  "include": ["coval_voice"],
+  "pythonVersion": "3.10",
+  "typeCheckingMode": "standard",
+  "reportMissingTypeStubs": false
+}

@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+python="$project_root/.venv/bin/python"
+validation_root=$(mktemp -d)
+trap 'rm -rf "$validation_root"' EXIT HUP INT TERM
+cd "$project_root"
+"$python" -m build --outdir "$validation_root/dist"
+"$python" -m twine check "$validation_root"/dist/*
+uv venv --python "$python" "$validation_root/venv"
+wheel_python="$validation_root/venv/bin/python"
+uv pip install --python "$wheel_python" "$validation_root"/dist/*.whl \
+  'pytest>=8,<10' 'pytest-asyncio>=0.24,<2'
+cd "$validation_root"
+env -u PYTHONPATH "$wheel_python" -c 'import coval_voice, sys; from pathlib import Path; assert Path(coval_voice.__file__).is_relative_to(Path(sys.prefix)); print("Import resolved to the isolated wheel installation.")'
+env -u PYTHONPATH "$wheel_python" -m pytest --import-mode=importlib \
+  "$project_root/tests/test_client.py" \
+  "$project_root/tests/test_streaming.py" \
+  "$project_root/tests/test_tracing.py" -q
+env -u PYTHONPATH "$validation_root/venv/bin/coval-tunnel" --help
+"$project_root/.venv/bin/pyright" --pythonpath "$wheel_python" \
+  -p "$project_root/pyrightconfig.sdk.json"
