@@ -5,6 +5,7 @@ import pathlib
 import subprocess
 import sys
 
+from packaging import requirements
 import pytest
 
 import coval_agent_sdk
@@ -13,21 +14,21 @@ from coval_agent_sdk import client
 from coval_agent_sdk import config
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
-from coval_agent_sdk import tracing
+from coval_agent_sdk import telemetry
 
 
 def test_public_facade_exports_the_documented_definitions():
     expected = {
         "CovalConnectionError": errors.CovalConnectionError,
         "CovalHttpError": errors.CovalHttpError,
-        "CovalTraceError": tracing.CovalTraceError,
-        "CovalTraceExporter": tracing.CovalTraceExporter,
+        "CovalTraceError": errors.CovalTraceError,
         "CovalVoiceClient": client.CovalVoiceClient,
         "RunConfig": config.RunConfig,
         "RunError": errors.RunError,
         "RunResult": results.RunResult,
         "SessionResult": results.SessionResult,
         "TraceResult": results.TraceResult,
+        "TraceExporter": telemetry.TraceExporter,
         "StreamingVoiceAgent": agent.StreamingVoiceAgent,
         "TunnelError": errors.TunnelError,
         "VoiceAgent": agent.VoiceAgent,
@@ -105,3 +106,26 @@ def test_distribution_declares_and_contains_license_notices():
     assert "Apache License" in license_text
     assert "Version 2.0, January 2004" in license_text
     assert "Copyright 2026 Coval, Inc." in license_files["NOTICE"].read_text()
+
+
+def test_opentelemetry_dependencies_belong_only_to_tracing_extra():
+    package = importlib.metadata.distribution("coval-agent-sdk")
+    declared = [
+        requirements.Requirement(item) for item in package.requires or ()
+    ]
+
+    def dependencies(extra):
+        return {
+            item.name
+            for item in declared
+            if item.marker is None or item.marker.evaluate({"extra": extra})
+        }
+
+    assert dependencies("") == {"websockets"}
+    assert dependencies("tracing") == {
+        "websockets",
+        "opentelemetry-api",
+        "opentelemetry-sdk",
+        "opentelemetry-exporter-otlp-proto-http",
+    }
+    assert "tracing" in package.metadata.get_all("Provides-Extra")

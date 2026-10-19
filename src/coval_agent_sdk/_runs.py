@@ -16,7 +16,7 @@ from coval_agent_sdk import agent
 from coval_agent_sdk import config as run_config
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
-from coval_agent_sdk import tracing
+from coval_agent_sdk import telemetry
 
 
 async def _get_monitoring_resource(
@@ -86,7 +86,7 @@ async def launch_and_run(
     api: _http.CovalApi,
     config: run_config.RunConfig,
     agent_factory: agent.AgentFactory,
-    trace_exporter: tracing.CovalTraceExporter | None = None,
+    trace_exporter: telemetry.TraceExporter | None = None,
 ) -> results.RunResult:
     """Launch once and retain completed outcomes through run failures."""
     active: dict[str, asyncio.Task[results.SessionResult]] = {}
@@ -130,7 +130,7 @@ async def _launch_and_run(
     api: _http.CovalApi,
     config: run_config.RunConfig,
     agent_factory: agent.AgentFactory,
-    trace_exporter: tracing.CovalTraceExporter | None,
+    trace_exporter: telemetry.TraceExporter | None,
     active: dict[str, asyncio.Task[results.SessionResult]],
     state: _RunState,
 ) -> results.RunResult:
@@ -222,7 +222,7 @@ async def _attach_simulations(
     run_id: str,
     deadline: float,
     agent_factory: agent.AgentFactory,
-    trace_exporter: tracing.CovalTraceExporter | None,
+    trace_exporter: telemetry.TraceExporter | None,
     seen: set[str],
     active: dict[str, asyncio.Task[results.SessionResult]],
 ) -> None:

@@ -12,7 +12,8 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 | `config.py` | Immutable run configuration and its validation. |
 | `errors.py` | API and relay errors, including partial run outcomes exposed to callers. |
 | `client.py` | Public `run()` and `connect()` orchestration. |
-| `tracing.py` | Bounded conversation trace buffers and upload lifecycle. |
+| `telemetry.py` | Dependency-free trace lifecycle protocol used by the client. |
+| `tracing.py` | Optional OpenTelemetry provider flush, buffers, and upload lifecycle. |
 | `_http.py` | Authenticated JSON requests; mutation requests are not retried. |
 | `_connection.py` | Offer discovery and one-use WebSocket connection setup. |
 | `_audio.py` | Outgoing PCM pacing, reply budgets, and streaming producer ownership. |
@@ -24,7 +25,7 @@ Paths without a directory prefix in this table are relative to `src/coval_agent_
 
 ## Dependency direction
 
-Public client methods call run/session orchestration. Orchestration depends on connection, audio, and HTTP owners. Adapter contracts, configuration, errors, and defaults remain small leaf responsibilities. Tracing owns its own buffers and HTTP exporter and does not import session orchestration.
+Public client methods call run/session orchestration. Orchestration depends on connection, audio, and HTTP owners. Adapter contracts, configuration, errors, and defaults remain small leaf responsibilities. Core orchestration depends on the dependency-free `TraceExporter` protocol. Only the optional `tracing` module imports OpenTelemetry; it owns provider flushing, buffers, and HTTP export and does not import session orchestration. Import its concrete exporter from `coval_agent_sdk.tracing`, not the root facade. The architecture checker rejects OpenTelemetry imports outside that integration module.
 
 Internal code imports owning modules rather than the root public facade. The root initializer is the only symbol-reexport facade. Do not introduce a cycle or move an import inside a function to hide one. `scripts/check_architecture.py` checks the allowed first-party dependency graph, top-level absolute imports, production dependency roots, and initializer contents.
 

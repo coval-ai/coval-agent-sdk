@@ -10,7 +10,12 @@ cd "$project_root"
 "$python" -m twine check "$validation_root"/dist/*
 uv venv --python "$python" "$validation_root/venv"
 wheel_python="$validation_root/venv/bin/python"
-uv pip install --python "$wheel_python" "$validation_root"/dist/*.whl \
+set -- "$validation_root"/dist/*.whl
+wheel="$1"
+uv pip install --python "$wheel_python" "$wheel"
+cd "$validation_root"
+env -u PYTHONPATH "$wheel_python" "$project_root/tests/base_install.py"
+uv pip install --python "$wheel_python" "${wheel}[tracing]" \
   'pytest>=8,<10' 'pytest-asyncio>=0.24,<2'
 cd "$validation_root"
 env -u PYTHONPATH "$wheel_python" - <<'PYTHON'

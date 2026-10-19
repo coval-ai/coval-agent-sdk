@@ -5,4 +5,4 @@ cd "$project_root"
 if [ ! -x .venv/bin/python ]; then
   uv venv --python "${PYTHON_VERSION:-3.12}" .venv
 fi
-uv pip install --python .venv/bin/python -e '.[dev]'
+uv pip install --python .venv/bin/python -e '.[dev,tracing]'

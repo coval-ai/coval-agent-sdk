@@ -52,7 +52,7 @@ Explicit protocol and overload rejections remain errors even if a later API read
 
 ## Trace lifecycle
 
-Tracing is optional. Share one `CovalTraceExporter` between the pipeline's OpenTelemetry setup and the SDK client, and correlate the conversation root with the simulation ID. The agent must finish its spans before closure returns so the SDK can flush and finalize that conversation.
+Tracing is optional and requires the `[tracing]` extra. Import the concrete exporter from `coval_agent_sdk.tracing`. Share one `CovalTraceExporter` between the pipeline's OpenTelemetry setup and the SDK client, and correlate the conversation root with the simulation ID. The agent must finish its spans before closure returns so session cleanup can ask the exporter to flush and finalize that conversation. The core uses a dependency-free protocol and does not look up an OpenTelemetry provider itself.
 
 The exporter buffers at most 10,000 ended spans and 10,000 trace metadata entries by default. Tune `max_buffered_spans` and `max_buffered_traces` for the process. Damaged traces retain rejection information so later roots cannot turn an incomplete trace into a successful upload. Uploading spans remain counted against the buffer budget.
 

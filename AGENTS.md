@@ -39,6 +39,7 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 - Return outcomes and raise failures without printing, logging, configuring logging, or adding CLI entry points.
 - Keep internal orchestration out of public client reexports; expose a definition through the root facade only when it is part of the reviewed developer API.
 - Keep provider frameworks, backend imports, AWS configuration, and consumer source paths outside the core SDK.
+- Keep optional integration dependencies behind extras and outside core imports; follow the dependency policy in `CONTRIBUTING.md`.
 - Add a dependency only for a concrete runtime or development requirement and keep its supported Python range consistent with `pyproject.toml`.
 - Update `README.md`, public docstrings, `CHANGELOG.md`, and affected examples when a supported interface changes.
 - Include `LICENSE` and `NOTICE` in source and wheel distributions, and keep the SPDX expression in `pyproject.toml` consistent with them.

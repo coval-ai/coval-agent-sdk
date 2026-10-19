@@ -10,8 +10,7 @@ import pytest
 import coval_agent_sdk
 from coval_agent_sdk import _connection
 from coval_agent_sdk import _defaults
-from coval_agent_sdk import _session
-from coval_agent_sdk import tracing
+from coval_agent_sdk import errors
 
 READY = json.dumps(
     {
@@ -139,10 +138,8 @@ async def test_connect_returns_trace_delivery_without_console_warnings(
     exporter = mock.Mock()
     exporter.upload.return_value = 7
     if trace_failure == "upload":
-        exporter.upload.side_effect = tracing.CovalTraceError("upload rejected")
-    provider = mock.Mock()
-    provider.force_flush.return_value = trace_failure != "flush"
-    monkeypatch.setattr(_session.trace, "get_tracer_provider", lambda: provider)
+        exporter.upload.side_effect = errors.CovalTraceError("upload rejected")
+    exporter.flush.return_value = trace_failure != "flush"
     monkeypatch.setattr(
         _connection,
         "open_voice_connection",

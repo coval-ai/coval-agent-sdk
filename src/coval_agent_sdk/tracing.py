@@ -6,19 +6,18 @@ import dataclasses
 import threading
 import time
 
+from opentelemetry import trace
 from opentelemetry.exporter.otlp.proto.http import (
     trace_exporter as otlp_trace_exporter,
 )
 from opentelemetry.sdk import trace as sdk_trace
 from opentelemetry.sdk.trace import export as trace_export
 
+from coval_agent_sdk import errors
+
 DEFAULT_MAX_BUFFERED_SPANS = 10_000
 DEFAULT_MAX_BUFFERED_TRACES = 10_000
 CONVERSATION_ID_ATTRIBUTE = "conversation.id"
-
-
-class CovalTraceError(RuntimeError):
-    """A conversation trace could not be prepared or uploaded."""
 
 
 @dataclasses.dataclass
@@ -64,6 +63,23 @@ class CovalTraceExporter(trace_export.SpanExporter):
         self._max_buffered_spans = max_buffered_spans
         self._max_buffered_traces = max_buffered_traces
         self._rejected_before_epoch_nanoseconds = 0
+
+    def flush(self, *, timeout_millis: int) -> bool:
+        """Flush ended provider spans before conversation finalization.
+
+        Args:
+            timeout_millis: Maximum provider flush duration in milliseconds.
+
+        Returns:
+            True when the configured provider flushed successfully. False when
+            no flush-capable provider is configured or it reports failure.
+
+        Raises:
+            Exception: The configured provider raises while flushing.
+        """
+        provider = trace.get_tracer_provider()
+        flush = getattr(provider, "force_flush", None)
+        return bool(callable(flush) and flush(timeout_millis=timeout_millis))
 
     def export(
         self, spans: Sequence[sdk_trace.ReadableSpan]
@@ -206,8 +222,8 @@ class CovalTraceExporter(trace_export.SpanExporter):
             Number of spans successfully uploaded.
 
         Raises:
-            CovalTraceError: The trace is missing, ambiguous, damaged, already
-                being uploaded, or rejected by the trace endpoint.
+            errors.CovalTraceError: The trace is missing, ambiguous, damaged,
+                already being uploaded, or rejected by the trace endpoint.
         """
         with self._lock:
             matching_trace_ids = [
@@ -216,7 +232,7 @@ class CovalTraceExporter(trace_export.SpanExporter):
                 if buffer.simulation_id == simulation_id
             ]
             if len(matching_trace_ids) != 1:
-                raise CovalTraceError(
+                raise errors.CovalTraceError(
                     f"Expected one completed Pipecat trace "
                     f"for simulation {simulation_id}, found "
                     f"{len(matching_trace_ids)}. Set "
@@ -226,7 +242,7 @@ class CovalTraceExporter(trace_export.SpanExporter):
             trace_id = matching_trace_ids[0]
             buffer = self._traces[trace_id]
             if buffer.uploading:
-                raise CovalTraceError(
+                raise errors.CovalTraceError(
                     f"A Coval trace upload is already in "
                     f"progress for simulation "
                     f"{simulation_id}."
@@ -234,7 +250,7 @@ class CovalTraceExporter(trace_export.SpanExporter):
             if buffer.damaged:
                 del self._traces[trace_id]
                 self._buffered_span_count -= len(buffer.spans)
-                raise CovalTraceError(
+                raise errors.CovalTraceError(
                     f"The Coval trace buffer discarded spans "
                     f"for simulation {simulation_id}; "
                     f"increase max_buffered_spans before "
@@ -261,7 +277,7 @@ class CovalTraceExporter(trace_export.SpanExporter):
             while spans:
                 result = exporter.export(spans)
                 if result != trace_export.SpanExportResult.SUCCESS:
-                    raise CovalTraceError(
+                    raise errors.CovalTraceError(
                         f"Coval rejected or could not receive "
                         f"traces for simulation {simulation_id}."
                     )
@@ -271,7 +287,7 @@ class CovalTraceExporter(trace_export.SpanExporter):
                 )
         except Exception as exception:
             self._finish_upload(trace_id, succeeded=False)
-            raise CovalTraceError(
+            raise errors.CovalTraceError(
                 f"Coval trace upload failed for "
                 f"simulation {simulation_id}: "
                 f"{exception}"
@@ -297,7 +313,7 @@ class CovalTraceExporter(trace_export.SpanExporter):
                     buffer.uploading = False
                     self._buffered_span_count -= len(buffer.spans)
                     buffer.spans.clear()
-                    raise CovalTraceError(
+                    raise errors.CovalTraceError(
                         f"The Coval trace buffer discarded spans "
                         f"during upload for simulation "
                         f"{buffer.simulation_id}."

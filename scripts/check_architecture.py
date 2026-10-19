@@ -15,7 +15,8 @@ _DEPENDENCIES: dict[str, set[str]] = {
     "results": set(),
     "agent": set(),
     "config": {"_defaults"},
-    "tracing": set(),
+    "telemetry": set(),
+    "tracing": {"errors"},
     "_http": {"_defaults", "errors"},
     "_connection": {"_defaults", "_http", "errors"},
     "_audio": {"_defaults", "agent", "errors"},
@@ -26,7 +27,7 @@ _DEPENDENCIES: dict[str, set[str]] = {
         "_http",
         "agent",
         "errors",
-        "tracing",
+        "telemetry",
         "results",
     },
     "_runs": {
@@ -36,7 +37,7 @@ _DEPENDENCIES: dict[str, set[str]] = {
         "agent",
         "config",
         "errors",
-        "tracing",
+        "telemetry",
         "results",
     },
     "client": {
@@ -46,10 +47,10 @@ _DEPENDENCIES: dict[str, set[str]] = {
         "_session",
         "agent",
         "config",
-        "tracing",
+        "telemetry",
         "results",
     },
-    "__init__": {"agent", "client", "config", "errors", "results", "tracing"},
+    "__init__": {"agent", "client", "config", "errors", "results", "telemetry"},
 }
 _FACADES = {"__init__"}
 _EXTERNAL_ROOTS = {"opentelemetry", "websockets"}
@@ -115,6 +116,8 @@ def _check_import(
         if target not in _DEPENDENCIES[owner]:
             messages.append(f"{owner} must not depend on {target}")
     for root in roots:
+        if root == "opentelemetry" and owner != "tracing":
+            messages.append("keep OpenTelemetry in the optional tracing module")
         if root not in (
             sys.stdlib_module_names | _EXTERNAL_ROOTS | {"coval_agent_sdk"}
         ):

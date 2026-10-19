@@ -6,7 +6,9 @@ from unittest import mock
 from opentelemetry import trace
 from opentelemetry.sdk import trace as sdk_trace
 from opentelemetry.sdk.trace import export as trace_export
+import pytest
 
+from coval_agent_sdk import errors
 from coval_agent_sdk import tracing
 
 
@@ -177,7 +179,7 @@ class TraceExporterTest(unittest.TestCase):
                     trace_export.SpanExportResult.FAILURE,
                 )
                 with self.assertRaisesRegex(
-                    tracing.CovalTraceError, "discarded spans"
+                    errors.CovalTraceError, "discarded spans"
                 ):
                     collector.upload(
                         simulation_id="abandoned",
@@ -231,7 +233,7 @@ class TraceExporterTest(unittest.TestCase):
                 "coval_agent_sdk.tracing.otlp_trace_exporter.OTLPSpanExporter",
                 side_effect=ValueError("bad URL"),
             ),
-            self.assertRaisesRegex(tracing.CovalTraceError, "bad URL"),
+            self.assertRaisesRegex(errors.CovalTraceError, "bad URL"),
         ):
             collector.upload(**upload_options)
 
@@ -272,7 +274,7 @@ class TraceExporterTest(unittest.TestCase):
             "api_key": "test-key",
         }
         with self.assertRaisesRegex(
-            tracing.CovalTraceError,
+            errors.CovalTraceError,
             "discarded spans for simulation damaged",
         ):
             collector.upload(simulation_id="damaged", **upload_options)
@@ -344,12 +346,12 @@ class TraceExporterTest(unittest.TestCase):
             return_value=otlp_exporter,
         ):
             with self.assertRaisesRegex(
-                tracing.CovalTraceError,
+                errors.CovalTraceError,
                 ("could not receive traces for simulation uploading"),
             ):
                 collector.upload(simulation_id="uploading", **upload_options)
             with self.assertRaisesRegex(
-                tracing.CovalTraceError,
+                errors.CovalTraceError,
                 "discarded spans for simulation concurrent",
             ):
                 collector.upload(simulation_id="concurrent", **upload_options)
@@ -407,7 +409,7 @@ class TraceExporterTest(unittest.TestCase):
                 trace_export.SpanExportResult.FAILURE,
             )
             with self.assertRaisesRegex(
-                tracing.CovalTraceError,
+                errors.CovalTraceError,
                 "discarded spans for simulation rejected",
             ):
                 collector.upload(simulation_id="rejected", **upload_options)
@@ -473,3 +475,25 @@ def test_export_rejects_a_span_without_a_trace_context():
 
 if __name__ == "__main__":
     unittest.main()
+
+
+@pytest.mark.parametrize("outcome", [True, False, "missing", "error"])
+def test_exporter_flush_delegates_to_the_configured_provider(
+    monkeypatch, outcome
+):
+    exporter = tracing.CovalTraceExporter()
+    provider = object() if outcome == "missing" else mock.Mock()
+    if outcome != "missing":
+        provider.force_flush.return_value = outcome
+    if outcome == "error":
+        provider.force_flush.side_effect = RuntimeError("provider flush failed")
+    monkeypatch.setattr(tracing.trace, "get_tracer_provider", lambda: provider)
+    if outcome == "error":
+        with pytest.raises(RuntimeError, match="provider flush failed"):
+            exporter.flush(timeout_millis=777)
+    else:
+        assert exporter.flush(timeout_millis=777) is (
+            False if outcome == "missing" else outcome
+        )
+    if outcome != "missing":
+        provider.force_flush.assert_called_once_with(timeout_millis=777)

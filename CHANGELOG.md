@@ -12,3 +12,4 @@ User-facing changes are recorded here. This project is in pre-release developmen
 - A Python-only API with immutable run/session/trace results, partial run snapshots on SDK run failures, and no internal logging or console output.
 - Typed package distributions, isolated-wheel validation, and supported-Python CI.
 - Google-based Python conventions, Ruff, strict Pyright, architecture checks, contribution guidance, and Apache-2.0 licensing.
+- Optional OpenTelemetry dependencies through `[tracing]`, with a dependency-free core trace contract and the concrete exporter in `coval_agent_sdk.tracing`.

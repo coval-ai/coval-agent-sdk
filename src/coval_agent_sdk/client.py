@@ -9,7 +9,7 @@ from coval_agent_sdk import _session
 from coval_agent_sdk import agent
 from coval_agent_sdk import config
 from coval_agent_sdk import results
-from coval_agent_sdk import tracing
+from coval_agent_sdk import telemetry
 
 
 class CovalVoiceClient:
@@ -30,7 +30,7 @@ class CovalVoiceClient:
         api_key: str,
         api_base_url: str = _defaults.DEFAULT_API_BASE_URL,
         workspace_id: str | None = None,
-        trace_exporter: tracing.CovalTraceExporter | None = None,
+        trace_exporter: telemetry.TraceExporter | None = None,
     ) -> None:
         """Configure authentication, workspace selection, and optional traces.
 

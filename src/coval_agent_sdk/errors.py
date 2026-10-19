@@ -47,3 +47,7 @@ class RunError(TunnelError):
         """
         super().__init__(message)
         self.result = result
+
+
+class CovalTraceError(RuntimeError):
+    """A conversation trace could not be prepared or uploaded."""

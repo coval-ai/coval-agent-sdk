@@ -20,7 +20,6 @@ from coval_agent_sdk import _audio
 from coval_agent_sdk import _connection
 from coval_agent_sdk import _defaults
 from coval_agent_sdk import _http
-from coval_agent_sdk import _session
 from coval_agent_sdk import tracing
 
 READY = json.dumps(
@@ -289,9 +288,9 @@ def test_public_package_imports_its_own_tracing_module(tmp_path):
 import sys
 import types
 sys.modules['tracing'] = types.ModuleType('consumer_owned_tracing')
-import coval_agent_sdk
+from coval_agent_sdk import tracing
 assert (
-    coval_agent_sdk.CovalTraceExporter.__module__ == 'coval_agent_sdk.tracing'
+    tracing.CovalTraceExporter.__module__ == 'coval_agent_sdk.tracing'
 )
 """
     subprocess.run(  # noqa: S603 - Fixed interpreter and source, no user input.
@@ -306,7 +305,7 @@ async def test_missing_terminal_frame_confirms_completion_and_uploads(
 ):
     socket = Socket()
     socket.messages.put_nowait(READY)
-    exporter = coval_agent_sdk.CovalTraceExporter()
+    exporter = tracing.CovalTraceExporter()
     provider = sdk_trace.TracerProvider()
     provider.add_span_processor(trace_export.SimpleSpanProcessor(exporter))
     span = provider.get_tracer(__name__).start_span(
@@ -318,7 +317,7 @@ async def test_missing_terminal_frame_confirms_completion_and_uploads(
     monkeypatch.setattr(
         tracing.otlp_trace_exporter, "OTLPSpanExporter", constructor
     )
-    monkeypatch.setattr(_session.trace, "get_tracer_provider", lambda: provider)
+    monkeypatch.setattr(tracing.trace, "get_tracer_provider", lambda: provider)
     monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
     monkeypatch.setattr(
         _connection,

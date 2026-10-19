@@ -10,7 +10,6 @@ from typing import Any
 from typing import cast
 from urllib import parse
 
-from opentelemetry import trace
 from websockets import exceptions
 from websockets.asyncio import client
 
@@ -21,7 +20,7 @@ from coval_agent_sdk import _http
 from coval_agent_sdk import agent as agent_contract
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
-from coval_agent_sdk import tracing
+from coval_agent_sdk import telemetry
 
 
 def _add_cleanup_note(exception: BaseException, note: str) -> None:
@@ -35,7 +34,7 @@ async def run_session(
     api: _http.CovalApi,
     simulation_id: str,
     agent_factory: agent_contract.AgentFactory,
-    trace_exporter: tracing.CovalTraceExporter | None = None,
+    trace_exporter: telemetry.TraceExporter | None = None,
 ) -> results.SessionResult:
     """Connect one simulation with a fresh agent and guaranteed local cleanup.
 
@@ -62,7 +61,7 @@ class _Session:
         api: _http.CovalApi,
         simulation_id: str,
         agent_factory: agent_contract.AgentFactory,
-        trace_exporter: tracing.CovalTraceExporter | None,
+        trace_exporter: telemetry.TraceExporter | None,
     ) -> None:
         self._api = api
         self._simulation_id = simulation_id
@@ -234,14 +233,12 @@ class _Session:
                 cleanup_error = exception
         if self._trace_exporter is not None:
             try:
-                provider = trace.get_tracer_provider()
-                flush = getattr(provider, "force_flush", None)
-                if not callable(flush) or not await asyncio.to_thread(
-                    flush,
+                if not await asyncio.to_thread(
+                    self._trace_exporter.flush,
                     timeout_millis=_defaults.TRACE_FLUSH_TIMEOUT_MILLISECONDS,
                 ):
-                    raise tracing.CovalTraceError(
-                        f"OpenTelemetry could not flush spans "
+                    raise errors.CovalTraceError(
+                        f"Trace exporter could not flush spans "
                         f"for simulation {self._simulation_id}."
                     )
                 if self._completed:
@@ -267,7 +264,7 @@ class _Session:
                         f"Trace cleanup also failed: {exception!r}",
                     )
                 elif self._completed and isinstance(
-                    exception, tracing.CovalTraceError
+                    exception, errors.CovalTraceError
                 ):
                     self._trace_result = results.TraceResult(
                         error=str(exception)

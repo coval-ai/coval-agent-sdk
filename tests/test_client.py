@@ -22,7 +22,6 @@ from coval_agent_sdk import client as voice_client
 from coval_agent_sdk import config as run_config
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
-from coval_agent_sdk import tracing
 
 TOKEN_EXPIRES_AT_EPOCH_SECONDS = 9_999_999_999
 SESSION_READY = (
@@ -509,16 +508,12 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
             side_effect=RuntimeError("agent cleanup failed")
         )
         exporter = mock.Mock()
-        provider = mock.Mock()
-        provider.force_flush.return_value = False
+        exporter.flush.return_value = False
         with (
             mock.patch.object(
                 _connection,
                 "open_voice_connection",
                 new=mock.AsyncMock(side_effect=session_error),
-            ),
-            mock.patch.object(
-                _session.trace, "get_tracer_provider", return_value=provider
             ),
             self.assertRaisesRegex(
                 SessionWithoutNotesError, "session failed"
@@ -530,7 +525,9 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
 
         self.assertIs(raised.exception, session_error)
         agent.close.assert_awaited_once()
-        provider.force_flush.assert_called_once()
+        exporter.flush.assert_called_once_with(
+            timeout_millis=_defaults.TRACE_FLUSH_TIMEOUT_MILLISECONDS
+        )
         exporter.discard.assert_called_once_with(simulation_id="simulation-1")
 
     async def test_pcm_is_acknowledged_while_greeting_audio_is_still_sending(
@@ -656,11 +653,10 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 exporter = mock.Mock()
                 exporter.upload.return_value = 1
                 if trace_failure == "upload":
-                    exporter.upload.side_effect = tracing.CovalTraceError(
+                    exporter.upload.side_effect = errors.CovalTraceError(
                         "trace upload failed"
                     )
-                provider = mock.Mock()
-                provider.force_flush.return_value = trace_failure != "flush"
+                exporter.flush.return_value = trace_failure != "flush"
                 with (
                     mock.patch.object(
                         _connection, "wait_for_offer", ready_offer
@@ -669,11 +665,6 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                         _connection.client,
                         "connect",
                         new=mock.AsyncMock(return_value=EndingSocket()),
-                    ),
-                    mock.patch.object(
-                        _session.trace,
-                        "get_tracer_provider",
-                        return_value=provider,
                     ),
                     (
                         self.assertRaisesRegex(
