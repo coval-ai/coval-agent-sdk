@@ -1,0 +1,101 @@
+name: Publish coval-agent-sdk to PyPI
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.4"
+      - name: Install SDK and development tools
+        env:
+          PYTHON_VERSION: "3.12"
+        run: scripts/install
+      - name: Verify release tag and main ancestry
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          version="$(.venv/bin/python - <<'PYTHON'
+          import pathlib
+          import tomllib
+
+          metadata = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
+          print(metadata["project"]["version"])
+          PYTHON
+          )"
+          if [ "$RELEASE_TAG" != "v${version}" ]; then
+            echo "Release tag must be v${version}; got ${RELEASE_TAG}." >&2
+            exit 1
+          fi
+          git fetch origin main:refs/remotes/origin/main
+          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
+            echo "Release commit must belong to main." >&2
+            exit 1
+          fi
+      - name: Validate style, types, architecture, and installed wheel
+        run: scripts/check
+      - name: Build release distributions
+        run: scripts/build
+      - name: Verify the release wheel in a clean environment
+        run: |
+          set -euo pipefail
+          uv venv --python .venv/bin/python "$RUNNER_TEMP/package-smoke"
+          python="$RUNNER_TEMP/package-smoke/bin/python"
+          set -- dist/*.whl
+          uv pip install --python "$python" "$1"
+          version="$(.venv/bin/python -c 'import importlib.metadata; print(importlib.metadata.version("coval-agent-sdk"))')"
+          cd "$RUNNER_TEMP"
+          env -u PYTHONPATH "$python" -I - "$version" <<'PYTHON'
+          import importlib.metadata
+          import sys
+
+          import coval_agent_sdk
+
+          assert importlib.metadata.version("coval-agent-sdk") == sys.argv[1]
+          assert hasattr(coval_agent_sdk, "AudioConnection")
+          assert hasattr(coval_agent_sdk, "CovalVoiceClient")
+          PYTHON
+      - name: Upload distributions
+        uses: actions/upload-artifact@v4
+        with:
+          name: coval-agent-sdk-dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/coval-agent-sdk/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@v4
+        with:
+          name: coval-agent-sdk-dist
+          path: dist/
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: dist/
+          attestations: true

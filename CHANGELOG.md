@@ -1,6 +1,6 @@
 # Changelog
 
-User-facing changes are recorded here. This project is in pre-release development; no stable release is listed.
+User-facing changes are recorded here. The initial version is `0.1.0`; no published release is listed.
 
 ## Unreleased
 
@@ -9,6 +9,8 @@ User-facing changes are recorded here. This project is in pre-release developmen
 - Expose framework-independent AudioConnection contexts and async run handlers; applications own their pipelines without SDK agent classes or factories. Bound incoming audio and pace serialized writes, preserving cleanup, results, and optional traces.
 
 ### Added
+
+- Tag-triggered PyPI publishing through GitHub Trusted Publishing, with version and main-branch ancestry checks and separate build/publish jobs. Set the initial package version to `0.1.0`.
 
 - A Python client for launching or attaching voice agents to Coval simulations with explicit workspace selection.
 - Independent bidirectional audio, paced PCM16 writes, bounded receive buffering, deadlines, and connection cleanup.
