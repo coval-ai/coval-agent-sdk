@@ -309,9 +309,11 @@ async def test_application_errors_keep_identity_and_cleanup_owned_resources(
             if phase == "start":
                 raise original
             async for _ in connection.receive_audio():
-                if phase in {"input", "output"}:
+                if phase == "input":
                     raise original
                 await connection.send_audio(OUTPUT)
+                if phase == "output":
+                    raise original
         finally:
             cleaned.append(connection.simulation_id)
             if phase == "cleanup":
@@ -334,6 +336,9 @@ async def test_application_errors_keep_identity_and_cleanup_owned_resources(
     assert raised.value is original
     assert not isinstance(raised.value, coval_agent_sdk.CovalError)
     assert cleaned == ["conversation-a"]
+    assert sockets["conversation-a"].sent.is_set() == (
+        phase in {"output", "cleanup"}
+    )
     assert sockets["conversation-a"].closed
     client.trace_exporter.upload.assert_not_called()
     client.trace_exporter.discard.assert_called_once_with(
