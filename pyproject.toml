@@ -46,6 +46,7 @@ dev = [
   "pytest>=8,<10",
   "pytest-asyncio>=0.24,<2",
   "pyright==1.1.414",
+  "python-semantic-release==10.7.0",
   "ruff==0.17.1",
   "twine>=6,<7",
 ]
@@ -70,6 +71,10 @@ target-version = "py310"
 line-length = 80
 src = ["src"]
 
+[tool.ruff.per-file-target-version]
+"scripts/validate_release.py" = "py312"
+"release_tests/**" = "py312"
+
 [tool.ruff.lint]
 select = [
   "E", "F", "W", "I", "N", "UP", "B", "A", "C4", "DTZ", "ISC",
@@ -91,6 +96,7 @@ order-by-type = false
 ban-relative-imports = "all"
 
 [tool.ruff.lint.per-file-ignores]
+"release_tests/**" = ["ANN", "D", "S101", "S105", "S106", "ARG", "PT009", "PT027", "C901"]
 "tests/**" = ["ANN", "D", "S101", "S105", "S106", "ARG", "PT009", "PT027", "C901"]
 
 [tool.ruff.format]
@@ -100,3 +106,27 @@ docstring-code-format = true
 
 [tool.ruff.lint.mccabe]
 max-complexity = 15
+
+[tool.semantic_release]
+allow_zero_version = true
+major_on_zero = true
+commit_parser = "conventional"
+commit_message = "chore(release): {version}"
+commit_author = "Coval Release Automation <coval-release-automation[bot]@users.noreply.github.com>"
+tag_format = "v{version}"
+version_toml = ["pyproject.toml:project.version"]
+
+[tool.semantic_release.branches.main]
+match = "main"
+prerelease = false
+
+[tool.semantic_release.changelog]
+mode = "init"
+
+[tool.semantic_release.changelog.default_templates]
+changelog_file = "CHANGELOG.md"
+mask_initial_release = false
+
+[tool.semantic_release.remote]
+url = "https://github.com/coval-ai/coval-agent-sdk.git"
+ignore_token_for_push = true

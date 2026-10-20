@@ -26,3 +26,18 @@ jobs:
         run: scripts/install
       - name: Validate style, types, architecture, and installed wheel
         run: scripts/check
+
+  release-tools:
+    name: Release tooling
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          version: "0.9.4"
+      - name: Install SDK and release tools
+        env:
+          PYTHON_VERSION: "3.12"
+        run: scripts/install
+      - name: Exercise semantic releases and publication guards
+        run: .venv/bin/python -m pytest release_tests -q

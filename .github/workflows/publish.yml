@@ -26,28 +26,10 @@ jobs:
         env:
           PYTHON_VERSION: "3.12"
         run: scripts/install
-      - name: Verify release tag and main ancestry
-        env:
-          RELEASE_TAG: ${{ github.ref_name }}
+      - name: Verify generated release tag
         run: |
-          set -euo pipefail
-          version="$(.venv/bin/python - <<'PYTHON'
-          import pathlib
-          import tomllib
-
-          metadata = tomllib.loads(pathlib.Path("pyproject.toml").read_text())
-          print(metadata["project"]["version"])
-          PYTHON
-          )"
-          if [ "$RELEASE_TAG" != "v${version}" ]; then
-            echo "Release tag must be v${version}; got ${RELEASE_TAG}." >&2
-            exit 1
-          fi
           git fetch origin main:refs/remotes/origin/main
-          if ! git merge-base --is-ancestor HEAD refs/remotes/origin/main; then
-            echo "Release commit must belong to main." >&2
-            exit 1
-          fi
+          .venv/bin/python scripts/validate_release.py tag "$GITHUB_REF_NAME"
       - name: Validate style, types, architecture, and installed wheel
         run: scripts/check
       - name: Build release distributions
