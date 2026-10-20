@@ -104,7 +104,7 @@ async def test_real_websocket_greeting_input_ack_reply_and_final_result(
                 assert audio == PCM
                 assert await connection.send_audio(audio)
         assert connection.closed
-        assert connection.result == coval_agent_sdk.SessionResult(
+        assert connection.result == coval_agent_sdk.ConversationResult(
             "conversation-a", 640, 1280
         )
         assert not await connection.send_audio(PCM)
@@ -349,7 +349,7 @@ async def test_lost_terminal_frame_requires_authoritative_completion(
             status_code=401, message="denied"
         )
     elif status == "INVALID_JSON":
-        read.side_effect = coval_agent_sdk.TunnelError("invalid JSON")
+        read.side_effect = coval_agent_sdk.CovalError("invalid JSON")
     monkeypatch.setattr(voice._api, "get", read)
     monkeypatch.setattr(_defaults, "CLOSE_CONFIRM_TIMEOUT_SECONDS", 0.01)
     monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)

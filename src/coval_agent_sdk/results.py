@@ -22,7 +22,7 @@ class TraceResult:
 
 
 @dataclasses.dataclass(frozen=True)
-class SessionResult:
+class ConversationResult:
     """Describe one completed local voice session after resource cleanup.
 
     Completion describes voice transport, not hosted evaluation or quality.
@@ -63,4 +63,4 @@ class RunResult:
 
     run_id: str
     status: str | None
-    conversations: tuple[SessionResult, ...]
+    conversations: tuple[ConversationResult, ...]

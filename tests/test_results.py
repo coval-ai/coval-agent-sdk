@@ -143,7 +143,7 @@ async def test_run_defers_queued_connections_within_batch_deadline(
     assert result == coval_agent_sdk.RunResult(
         "run-a",
         "COMPLETED",
-        (coval_agent_sdk.SessionResult("conversation-a", 640, 640),),
+        (coval_agent_sdk.ConversationResult("conversation-a", 640, 640),),
     )
     assert sockets["conversation-a"].closed
 
@@ -184,8 +184,8 @@ async def test_run_delivers_distinct_connections_and_structured_silent_results(
         "run-a",
         hosted_status,
         (
-            coval_agent_sdk.SessionResult("conversation-a", 640, 640),
-            coval_agent_sdk.SessionResult("conversation-b", 640, 640),
+            coval_agent_sdk.ConversationResult("conversation-a", 640, 640),
+            coval_agent_sdk.ConversationResult("conversation-b", 640, 640),
         ),
     )
     assert {c.simulation_id for c in connections} == {
@@ -309,9 +309,11 @@ async def test_application_errors_keep_identity_and_cleanup_owned_resources(
             if phase == "start":
                 raise original
             async for _ in connection.receive_audio():
-                if phase in {"input", "output"}:
+                if phase == "input":
                     raise original
                 await connection.send_audio(OUTPUT)
+                if phase == "output":
+                    raise original
         finally:
             cleaned.append(connection.simulation_id)
             if phase == "cleanup":
@@ -334,6 +336,9 @@ async def test_application_errors_keep_identity_and_cleanup_owned_resources(
     assert raised.value is original
     assert not isinstance(raised.value, coval_agent_sdk.CovalError)
     assert cleaned == ["conversation-a"]
+    assert sockets["conversation-a"].sent.is_set() == (
+        phase in {"output", "cleanup"}
+    )
     assert sockets["conversation-a"].closed
     client.trace_exporter.upload.assert_not_called()
     client.trace_exporter.discard.assert_called_once_with(
@@ -412,7 +417,7 @@ async def test_failure_cancels_and_awaits_real_sibling_handlers(
 
         monkeypatch.setattr(_connection, "open_voice_connection", connect)
     original = (
-        coval_agent_sdk.TunnelError("SDK failed")
+        coval_agent_sdk.CovalError("SDK failed")
         if failure_kind == "sdk"
         else asyncio.CancelledError("stopped")
         if failure_kind == "cancellation"

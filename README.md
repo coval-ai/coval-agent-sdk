@@ -71,7 +71,7 @@ if __name__ == "__main__":
 ```python
 async def attach(
     client: coval_agent_sdk.CovalVoiceClient, simulation_id: str
-) -> coval_agent_sdk.SessionResult | None:
+) -> coval_agent_sdk.ConversationResult | None:
     async with client.connect(simulation_id) as connection:
         await on_connection(connection)
     return connection.result
@@ -88,7 +88,7 @@ The context closes transport and finalizes traces after application code exits. 
 | `send_audio(audio)` | Await a paced write. Returns `True` for a complete write, `False` when normal completion interrupts it; failures raise. |
 | `wait_closed()` | Wait for voice completion without consuming input; failures raise. |
 | `closed` | Whether the exchange has ended, including failure. |
-| `result` | Finalized `SessionResult` after successful context exit, otherwise `None`. |
+| `result` | Finalized `ConversationResult` after successful context exit, otherwise `None`. |
 
 Input and output are independent, so the pipeline may greet the caller before receiving any audio. Audio is PCM16 little-endian, mono, 16 kHz. A normal 20 ms frame contains 640 bytes. The SDK does not resample or implement relay interruption/clear controls. Framework integrations own conversion and interruption policy.
 
@@ -96,11 +96,13 @@ Drain incoming audio promptly into a bounded pipeline; unread input is limited t
 
 ## Results and failures
 
-`RunResult` contains `run_id`, the hosted `status`, and a tuple of completed `conversations`. Each `SessionResult` contains `simulation_id`, local voice `status`, `received_audio_bytes`, `sent_audio_bytes`, and an optional `trace` outcome. These immutable objects contain no relay credentials or transport objects.
+`RunResult` contains `run_id`, the hosted `status`, and a tuple of completed `conversations`. Each `ConversationResult` contains `simulation_id`, local voice `status`, `received_audio_bytes`, `sent_audio_bytes`, and an optional `trace` outcome. These immutable objects contain no relay credentials or transport objects.
 
 A returned run has completed its execution; this does not mean the agent passed its quality criteria. A returned session describes completed voice transport, not hosted evaluation. With tracing disabled, `session.trace` is `None`. Otherwise, `TraceResult.uploaded_spans` reports delivered spans after a successful upload (`None` when a failure leaves the count unknown), and `TraceResult.error` contains an optional flush/upload failure. The calling application decides how to store or display those outcomes.
 
-Catch `CovalError` for SDK-owned failures, or a specific subclass such as `CovalHttpError`, `TunnelError`, `RunError`, or `CovalTraceError`. Adapter exceptions and `asyncio.CancelledError` propagate unchanged after local cleanup; catching `CovalError` does not catch them.
+Catch `CovalError` for SDK-owned failures, or a specific subclass such as `CovalHttpError`, `CovalConnectionError`, `RunError`, or `CovalTraceError`. Adapter exceptions and `asyncio.CancelledError` propagate unchanged after local cleanup; catching `CovalError` does not catch them.
+
+For constructor and input checks, see [argument validation](docs/developer-api.md#argument-validation).
 
 Failures raise instead of returning success. After a run is created, an SDK run failure raises `RunError` with a `result` snapshot containing its ID, last observed monitoring status (`None` before the first status response), and completed local conversations. Failed, cancelled, unfinished, or missed conversations do not appear as successful results. Local cancellation still propagates after cleanup and does not imply hosted cancellation.
 
@@ -118,7 +120,7 @@ exporter = tracing.CovalTraceExporter()
 
 Register it with your pipeline's OpenTelemetry setup, and pass the same exporter to `CovalVoiceClient(trace_exporter=...)`. Use a root span named `conversation` whose `conversation.id` attribute is the simulation ID available as `connection.simulation_id`. The SDK flushes ended spans and uploads each completed conversation separately.
 
-Spans may contain prompts, transcripts, and model output. Enable upload only for data you intend to send to Coval. Failed-session traces are discarded after cleanup; a failed upload after a completed voice session is returned in `SessionResult.trace.error` and can be retried through the retained exporter. See [trace lifecycle](docs/runtime.md#trace-lifecycle) for buffer limits and failure semantics.
+Spans may contain prompts, transcripts, and model output. Enable upload only for data you intend to send to Coval. Failed-session traces are discarded after cleanup; a failed upload after a completed voice session is returned in `ConversationResult.trace.error` and can be retried through the retained exporter. See [trace lifecycle](docs/runtime.md#trace-lifecycle) for buffer limits and failure semantics.
 
 ## Develop and contribute
 

@@ -60,6 +60,8 @@ Patch collaborators at their owning modules, not through the root facade. Keep t
 
 Use synthetic identifiers and audio. Do not make live API or provider calls in the automated suite. A separately authorized hosted check must record the selected environment, source/artifact identity, and terminal result; mocked checks do not establish hosted acceptance.
 
+The public wire tests use loopback HTTP and TLS WebSocket servers. They require `openssl` on `PATH` to generate a temporary certificate and key; no test credentials are committed. Only the local CA trust and polling interval are injected into the client. Discovery, the HTTP adapter, WebSocket upgrade, audio exchange, monitoring, and public result construction execute normally. These tests prove the local protocol path, not deployed Cloudflare or production behavior.
+
 ## API and dependencies
 
 Add public exports deliberately and document their ownership, inputs, outputs, error behavior, and cleanup obligations. Keep the importable package independent of any particular agent framework. Put unimplemented interfaces in [API design](docs/developer-api.md), clearly marked as proposals.

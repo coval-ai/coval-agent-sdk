@@ -212,7 +212,7 @@ async def test_invalid_discovery_response_raises_agent_sdk_error(
     voice = coval_agent_sdk.CovalVoiceClient(
         api_key="synthetic-key", api_base_url=url
     )
-    with pytest.raises(coval_agent_sdk.TunnelError, match=message):
+    with pytest.raises(coval_agent_sdk.CovalError, match=message):
         async with voice.connect("simulation-a"):
             pytest.fail("Invalid discovery reached application code")
     assert len(requests) == 1

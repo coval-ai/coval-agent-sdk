@@ -20,15 +20,15 @@ def validate_audio(audio: object) -> None:
         audio: PCM16 little-endian mono 16 kHz bytes.
 
     Raises:
-        errors.TunnelError: Audio is malformed or exceeds the 2 MiB limit.
+        errors.CovalError: Audio is malformed or exceeds the 2 MiB limit.
     """
     if (
         not isinstance(audio, bytes)
         or len(audio) % _defaults.VOICE_SAMPLE_WIDTH_BYTES
     ):
-        raise errors.TunnelError("Audio must be even-length PCM16 bytes.")
+        raise errors.CovalError("Audio must be even-length PCM16 bytes.")
     if len(audio) > _defaults.MAX_SEND_BYTES:
-        raise errors.TunnelError(
+        raise errors.CovalError(
             "Audio exceeds the 2 MiB limit; send smaller chunks."
         )
 
@@ -78,12 +78,12 @@ class ConnectionState:
         self.error: BaseException | None = None
         self.completed = False
         self.received_bytes = 0
-        self.result: results.SessionResult | None = None
+        self.result: results.ConversationResult | None = None
 
     def feed_audio(self, audio: bytes) -> None:
         """Bound unread audio without blocking terminal control frames."""
         if self.buffered_bytes + len(audio) > _defaults.MAX_RECEIVE_BYTES:
-            raise errors.TunnelError(
+            raise errors.CovalError(
                 "Unread audio exceeded the 64 KiB receive buffer; "
                 "drain receive_audio() promptly into a bounded pipeline."
             )
