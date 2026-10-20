@@ -43,7 +43,7 @@ class AudioConnection:
         return self._state.closed.is_set()
 
     @property
-    def result(self) -> results.SessionResult | None:
+    def result(self) -> results.ConversationResult | None:
         """Completed outcome after context exit, or None before finalization."""
         return self._state.result
 
@@ -104,7 +104,7 @@ class AudioConnection:
         if self.closed:
             return False
         if self._state.websocket is None or not self._state.ready.is_set():
-            raise errors.TunnelError("The audio connection is not ready.")
+            raise errors.CovalError("The audio connection is not ready.")
         sending = asyncio.create_task(
             self._state.writer.send(self._state.websocket, audio)
         )

@@ -9,11 +9,7 @@ class CovalError(RuntimeError):
     """Base for SDK failures; excludes application errors and cancellation."""
 
 
-class TunnelError(CovalError):
-    """The Coval API or relay could not complete a voice session."""
-
-
-class CovalHttpError(TunnelError):
+class CovalHttpError(CovalError):
     """An HTTP error returned by the Coval API.
 
     Attributes:
@@ -31,11 +27,11 @@ class CovalHttpError(TunnelError):
         self.status_code = status_code
 
 
-class CovalConnectionError(TunnelError):
+class CovalConnectionError(CovalError):
     """An API request could not reach Coval."""
 
 
-class RunError(TunnelError):
+class RunError(CovalError):
     """A launched run failed, retaining its known identity and local outcomes.
 
     Attributes:

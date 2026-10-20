@@ -57,12 +57,12 @@ async def wait_for_offer(
             token = connection.get("token")
             expires_at = connection.get("expires_at")
             if not isinstance(url, str) or not url.startswith("wss://"):
-                raise errors.TunnelError(
+                raise errors.CovalError(
                     f"Simulation {simulation_id} returned "
                     f"READY without a WSS URL."
                 )
             if not isinstance(token, str) or not token:
-                raise errors.TunnelError(
+                raise errors.CovalError(
                     f"Simulation {simulation_id} returned "
                     f"READY without a token."
                 )
@@ -70,7 +70,7 @@ async def wait_for_offer(
                 not isinstance(expires_at, (int, float))
                 or expires_at <= time.time()
             ):
-                raise errors.TunnelError(
+                raise errors.CovalError(
                     f"Simulation {simulation_id} returned an "
                     f"expired connection offer."
                 )
@@ -78,18 +78,18 @@ async def wait_for_offer(
                 wss_url=url, token=token, expires_at=float(expires_at)
             )
         if status in _defaults.TERMINAL_CONNECTION_STATUSES:
-            raise errors.TunnelError(
+            raise errors.CovalError(
                 f"Simulation {simulation_id} ended before connecting: {status}."
             )
         # An unattached attempt can expire while the worker prepares its
         # replacement.
         if status not in {"PENDING", "PROVISIONING", "EXPIRED"}:
-            raise errors.TunnelError(
+            raise errors.CovalError(
                 f"Simulation {simulation_id} returned "
                 f"unknown connection status {status!r}."
             )
         await asyncio.sleep(_defaults.POLL_INTERVAL_SECONDS)
-    raise errors.TunnelError(
+    raise errors.CovalError(
         f"Simulation {simulation_id} did not "
         f"publish a relay connection within "
         f"{_defaults.CONNECT_WAIT_SECONDS} "
@@ -111,7 +111,7 @@ async def open_voice_connection(
                 wait_for_offer(api, simulation_id), timeout=remaining_seconds
             )
         except asyncio.TimeoutError as exception:
-            raise errors.TunnelError(
+            raise errors.CovalError(
                 f"Simulation {simulation_id} did not "
                 f"offer a usable relay before its "
                 f"connect deadline."
@@ -144,7 +144,7 @@ async def open_voice_connection(
                 exceptions.WebSocketException,
             ) as exception:
                 if client.process_exception(exception) is not None:
-                    raise errors.TunnelError(
+                    raise errors.CovalError(
                         f"Simulation {simulation_id} relay upgrade failed."
                     ) from exception
                 last_error = exception
@@ -158,7 +158,7 @@ async def open_voice_connection(
                     retry_delay_seconds * 2, _defaults.CONNECT_RETRY_MAX_SECONDS
                 )
         retry_delay_seconds = _defaults.POLL_INTERVAL_SECONDS
-    raise errors.TunnelError(
+    raise errors.CovalError(
         f"Simulation {simulation_id} could not "
         f"connect to its voice relay "
         f"before the deadline."
