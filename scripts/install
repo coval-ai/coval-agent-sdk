@@ -1,0 +1,8 @@
+#!/bin/sh
+set -eu
+project_root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cd "$project_root"
+if [ ! -x .venv/bin/python ]; then
+  uv venv --python "${PYTHON_VERSION:-3.12}" .venv
+fi
+uv pip install --python .venv/bin/python -e '.[dev,tracing]'
