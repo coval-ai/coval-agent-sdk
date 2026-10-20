@@ -41,7 +41,7 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 - Keep provider frameworks, backend imports, AWS configuration, and consumer source paths outside the core SDK.
 - Keep optional integration dependencies behind extras and outside core imports; follow the dependency policy in `CONTRIBUTING.md`.
 - Add a dependency only for a concrete runtime or development requirement and keep its supported Python range consistent with `pyproject.toml`.
-- Update `README.md`, public docstrings, `CHANGELOG.md`, and affected examples when a supported interface changes.
+- Update `README.md`, public docstrings, and affected examples when a supported interface changes.
 - Include `LICENSE` and `NOTICE` in source and wheel distributions, and keep the SPDX expression in `pyproject.toml` consistent with them.
 
 ## Runtime
@@ -74,6 +74,8 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 ## Releases and security
 
 - Follow `docs/releasing.md` when preparing a version or distribution.
+- Use Conventional Commit PR titles and squash merges; release automation owns version bumps, `CHANGELOG.md`, and release tags.
+- Run `.venv/bin/python -m pytest release_tests -q` on Python 3.12 after changing release tooling; CI runs it separately from runtime tests.
 - Obtain explicit authorization before publishing packages, changing repository visibility, or adding publishing automation.
 - Preserve an existing pull request's draft state unless the user authorizes changing it.
 - Follow `SECURITY.md` for vulnerability reports and avoid putting sensitive reproduction details in public issues.

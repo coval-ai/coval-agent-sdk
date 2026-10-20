@@ -2,7 +2,7 @@
 
 Connect Python voice agents to Coval simulations through an authenticated outbound WebSocket. Your process runs the agent; Coval supplies the simulated caller, records the conversation, and evaluates the result. The agent does not need a public URL or a listening port.
 
-The distribution is `coval-agent-sdk`, the Python package is `coval_agent_sdk`, and the API is a Python library. Requires Python 3.10 or newer. This SDK is in pre-release development; install from a checkout while the API is being designed.
+The distribution is `coval-agent-sdk`, the Python package is `coval_agent_sdk`, and the API is a Python library. Requires Python 3.10 or newer. The initial release candidate is `0.1.0`; install from a checkout until it is published.
 
 ## Install from source
 
@@ -20,7 +20,7 @@ scripts/install
 .venv/bin/python -c "import coval_agent_sdk"
 ```
 
-See [local development](docs/local-development.md) for building a wheel and installing it into another project. A source install does not publish a package.
+See [local development](docs/local-development.md) for building a wheel and installing it into another project. A source install does not publish a package. Maintainers can follow [releasing](docs/releasing.md) to configure PyPI publishing.
 
 ## Connect an existing agent
 

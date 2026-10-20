@@ -24,7 +24,7 @@ The editable installation makes source changes available in `.venv`. Installatio
 5. Open a pull request explaining the problem, resulting behavior, relevant evidence, and any migration or release implications. Link the issue when one exists.
 6. Have the change reviewed before merging. Keep design experiments in draft until their scope and API are ready for review.
 
-Use a concise Conventional Commit subject such as `fix: preserve cancellation during trace cleanup` or `docs: clarify audio connection ownership`. Commit and PR bodies explain why the change is needed; they should not narrate every command run.
+Use squash merges with a concise Conventional Commit PR title such as `fix: preserve cancellation during trace cleanup` or `docs: clarify audio connection ownership`. Commit and PR bodies explain why the change is needed; they should not narrate every command run.
 
 ## Checks
 
@@ -40,6 +40,8 @@ For a focused test during iteration:
 ```sh
 .venv/bin/python -m pytest tests/test_streaming.py -q
 ```
+
+Release tooling uses Python 3.12 and the pinned `python-semantic-release` development dependency. After changing its configuration, workflow, or validator, also run `.venv/bin/python -m pytest release_tests -q`. This separate suite exercises real release tooling in isolated Git repositories without contacting GitHub or PyPI; CI runs it in a dedicated job. It is not part of the installed SDK runtime suite.
 
 For safe automated fixes:
 
@@ -76,7 +78,7 @@ Put optional integration dependencies in a named extra and declare every externa
 
 For a new dependency, explain why the SDK needs it, its Python support, and its distribution/license implications. Update the affected tests and package metadata. Review dependency upgrades as code changes; do not relax constraints solely to silence a failing check.
 
-Update [CHANGELOG.md](CHANGELOG.md) under `Unreleased` when user-facing behavior, supported APIs, dependencies, or packaging changes. This is a pre-release SDK; do not invent a released compatibility promise for an internal helper.
+Release automation owns the version in `pyproject.toml` and [CHANGELOG.md](CHANGELOG.md). Do not bump versions or edit the changelog in feature PRs. Squash-merged Conventional Commit titles supply the release notes: `fix:` and `perf:` produce a patch, `feat:` a minor, and `!` or `BREAKING CHANGE:` a major, including a move from `0.x` to `1.0.0`. Other types do not trigger a release on their own. Follow [releasing](docs/releasing.md) for setup, retries, and publication evidence.
 
 ## Where prose lives
 

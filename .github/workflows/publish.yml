@@ -1,0 +1,83 @@
+name: Publish coval-agent-sdk to PyPI
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pypi-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Validate and build distributions
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+      - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
+        with:
+          version: "0.9.4"
+      - name: Install SDK and development tools
+        env:
+          PYTHON_VERSION: "3.12"
+        run: scripts/install
+      - name: Verify generated release tag
+        run: |
+          git fetch origin main:refs/remotes/origin/main
+          .venv/bin/python scripts/validate_release.py tag "$GITHUB_REF_NAME"
+      - name: Validate style, types, architecture, and installed wheel
+        run: scripts/check
+      - name: Build release distributions
+        run: scripts/build
+      - name: Verify the release wheel in a clean environment
+        run: |
+          set -euo pipefail
+          uv venv --python .venv/bin/python "$RUNNER_TEMP/package-smoke"
+          python="$RUNNER_TEMP/package-smoke/bin/python"
+          set -- dist/*.whl
+          uv pip install --python "$python" "$1"
+          version="$(.venv/bin/python -c 'import importlib.metadata; print(importlib.metadata.version("coval-agent-sdk"))')"
+          cd "$RUNNER_TEMP"
+          env -u PYTHONPATH "$python" -I - "$version" <<'PYTHON'
+          import importlib.metadata
+          import sys
+
+          import coval_agent_sdk
+
+          assert importlib.metadata.version("coval-agent-sdk") == sys.argv[1]
+          assert hasattr(coval_agent_sdk, "AudioConnection")
+          assert hasattr(coval_agent_sdk, "CovalVoiceClient")
+          PYTHON
+      - name: Upload distributions
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: coval-agent-sdk-dist
+          path: dist/
+          if-no-files-found: error
+
+  publish:
+    name: Publish to PyPI
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: pypi
+      url: https://pypi.org/project/coval-agent-sdk/
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - name: Download distributions
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: coval-agent-sdk-dist
+          path: dist/
+      - name: Publish distributions
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086 # release/v1
+        with:
+          packages-dir: dist/
+          attestations: true

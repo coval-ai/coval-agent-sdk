@@ -34,12 +34,12 @@ uv pip install --python /path/to/consumer/.venv/bin/python \
   -e /path/to/coval-agent-sdk
 ```
 
-For packaging acceptance, build and install the wheel instead:
+For packaging acceptance, start with an empty `dist/` directory, then build and install the wheel:
 
 ```sh
 scripts/build
 uv pip install --python /path/to/consumer/.venv/bin/python \
-  dist/coval_agent_sdk-0.2.0a1-py3-none-any.whl
+  dist/coval_agent_sdk-*.whl
 ```
 
 Run the consumer's relevant tests against that installed wheel. Editable-install success does not prove that the source archive or wheel contains every required file.
