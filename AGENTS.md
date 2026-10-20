@@ -55,15 +55,21 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 - Use synthetic fixtures and deterministic local collaborators for automated tests; live simulations need an explicitly selected environment and existing authorization.
 - Never commit credentials, one-use connection tokens, customer audio, or transcripts; secret scanning cannot establish that every fixture is safe.
 
-## Tests and documentation
+## Tests
 
-- Follow `CONTRIBUTING.md` for behavior-focused tests, reviewable changes, comments, and Markdown.
+- Follow `CONTRIBUTING.md` for behavior-focused tests and reviewable changes.
 - Keep tests outside `src/` and exercise installed-package boundaries without modifying `sys.path`.
 - Patch dependencies at the module that owns them and keep the behavior under test real.
 - Preserve assertions for failure, cancellation, cleanup, and supported public entry points when reorganizing tests.
 - Distinguish local, mocked, and hosted evidence; do not infer a completed simulation from a successful launch or connection.
-- Keep each rule in one authoritative document and link to it from related pages.
-- Keep public documentation focused on how to use and change the SDK; retain internal delivery history in the work tracker.
+
+## Documentation and comments
+
+- Read `CONTRIBUTING.md`'s "Documentation and comments" section before writing documentation or code comments.
+- Follow its document ownership, comment purpose, placement, and review rules; keep explanations in one authoritative page and link from other pages.
+- Search README files, docs, guidance, templates, and examples for changed APIs or behavior, and update affected claims in the same change.
+- Write Markdown paragraphs on one line; keep Python comments and docstrings within the Google-based formatting conventions.
+- Keep public documentation focused on current supported behavior; retain internal delivery history in the work tracker and label proposals and unverified evidence explicitly.
 
 ## Releases and security
 

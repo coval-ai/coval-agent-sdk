@@ -24,7 +24,7 @@ The editable installation makes source changes available in `.venv`. Installatio
 5. Open a pull request explaining the problem, resulting behavior, relevant evidence, and any migration or release implications. Link the issue when one exists.
 6. Have the change reviewed before merging. Keep design experiments in draft until their scope and API are ready for review.
 
-Use a concise Conventional Commit subject such as `fix: preserve cancellation during trace cleanup` or `docs: clarify streaming adapter ownership`. Commit and PR bodies explain why the change is needed; they should not narrate every command run.
+Use a concise Conventional Commit subject such as `fix: preserve cancellation during trace cleanup` or `docs: clarify audio connection ownership`. Commit and PR bodies explain why the change is needed; they should not narrate every command run.
 
 ## Checks
 
@@ -70,7 +70,7 @@ Keep `coval-sdk` and its HTTP dependency inside the private `_http.py` adapter. 
 
 Derive SDK-owned failures from `CovalError` and retain useful specific subclasses. Do not wrap application exceptions or cancellation as SDK errors. Preserve the original failure through session cleanup and batch sibling cancellation; attach `RunError` snapshots only to SDK failures after launch. Completed-session trace delivery failures remain structured diagnostics.
 
-Put optional integration dependencies in a named extra and declare every external package imported directly by that integration. Keep the base SDK importable and runnable without those dependencies. OpenTelemetry belongs only in `coval_agent_sdk.tracing`; use its protobuf encoder with the private HTTP adapter rather than an exporter that emits logs or hides retry policy. core code uses the dependency-free `TraceExporter` contract. `scripts/check` first exercises a clean base wheel installation, then installs `[tracing]` and runs the full suite.
+Put optional integration dependencies in a named extra and declare every external package imported directly by that integration. Keep the base SDK importable and runnable without those dependencies. OpenTelemetry belongs only in `coval_agent_sdk.tracing`; use its protobuf encoder with the private HTTP adapter rather than an exporter that emits logs or hides retry policy. Core code uses the dependency-free `TraceExporter` contract. `scripts/check` first exercises a clean base wheel installation, then installs `[tracing]` and runs the full suite.
 
 For a new dependency, explain why the SDK needs it, its Python support, and its distribution/license implications. Update the affected tests and package metadata. Review dependency upgrades as code changes; do not relax constraints solely to silence a failing check.
 
@@ -91,11 +91,41 @@ Update [CHANGELOG.md](CHANGELOG.md) under `Unreleased` when user-facing behavior
 
 Keep explanations in their owning document and link to them elsewhere. Use one paragraph per line in Markdown; leave code blocks, tables, and lists structured normally. Python comments and docstrings follow the formatter and 80-column conventions instead.
 
-## Comments and docstrings
+## Documentation and comments
 
-Use names, types, and small functions to explain what the code does. Write a comment when it adds a constraint, rationale, external contract, or concurrency consequence the code cannot express clearly. Keep it next to the code it explains, and link durable documentation when that settles the point.
+Document the current behavior and the decisions a developer needs to use or change it. The ownership map above determines where an explanation belongs; keep a single authoritative explanation and link to it from other pages.
 
-Avoid banners, narration, private issue links, change history, and comments that repeat the next statement. Document public behavior with [Google-style docstrings](docs/python-style.md#docstrings), not incidental implementation steps. A temporary workaround needs an explicit condition for removal.
+### Write a comment when
+
+- A value, limit, dependency pin, or protocol choice has a reason the code cannot express.
+- Changing the behavior has a consequence outside the function, such as a wire-contract change, resource leak, cancellation interaction, or broken consumer.
+- Correctness depends on ordering, concurrency, or another component's behavior.
+- A temporary workaround has a specific condition for removal.
+
+### Leave a comment out when
+
+- It repeats a name, annotation, expression, or the next statement.
+- It is a banner, divider, file-level narrative, or an explanation repeated in sibling modules.
+- It recounts a previous implementation, rejected approach, ticket, pull request, or incident; durable delivery history belongs in the work tracker.
+- It makes a claim that will drift, such as an unexplained current count or "for now" without an exit condition.
+
+### Form and review
+
+Place a comment immediately above the code it explains. Use concise plain sentences; put a longer explanation in a README or docs page and link to that path. Prefer documentation links over private issue or pull-request links. Rule-specific tool suppressions may remain inline when the checker requires it; include their concrete reason.
+
+Delete the comment mentally and read the code again. If no useful information disappears, remove it. If information does disappear, first check whether a clearer name, type, or structure can express it directly.
+
+Use one paragraph per line in Markdown and structured lists/tables where useful. Python comments and docstrings follow the Google-based 80-column conventions in [Python conventions](docs/python-style.md); the Markdown wrapping rule does not override the formatter.
+
+### Keep documentation current
+
+When changing an API, configuration value, dependency, behavior, or command, search README files, docs, contribution guidance, templates, and examples for its name and update every affected claim in the same change. Recheck "all", "every", and "only" claims against the resulting implementation.
+
+Describe supported behavior separately from proposals and release prerequisites. Verify local links and anchors, check examples and commands against the actual API, and distinguish syntax checks, offline tests, and hosted evidence. Do not imply publication, deployment, or live acceptance from a successful local build.
+
+### Docstrings
+
+Document public behavior with [Google-style docstrings](docs/python-style.md#docstrings), including meaningful arguments, results, errors, units, ownership, and cancellation where relevant. Docstrings explain the callable's contract; code comments explain constraints at the point they matter.
 
 ## Security and conduct
 

@@ -26,4 +26,4 @@ Authoring rules for this repository's `AGENTS.md`. This file also governs edits 
 - Remove obsolete rules and duplicated instructions instead of accumulating exceptions.
 - Read `AGENTS.md`, this file, and affected linked sections after an edit; resolve contradictions before finishing.
 - Verify every referenced local path and command, and label any check that was not executed.
-- Follow `CONTRIBUTING.md` for prose and comment formatting.
+- Follow `CONTRIBUTING.md` for documentation ownership, prose, and comment review; preserve Python formatting rules when adapting guidance from another language.

@@ -506,3 +506,41 @@ assert tracing.CovalTraceExporter.__module__ == 'coval_agent_sdk.tracing'
     subprocess.run(  # noqa: S603 - Fixed interpreter and source, no user input.
         [sys.executable, "-I", "-c", code], cwd=tmp_path, check=True
     )
+
+
+@pytest.mark.asyncio
+async def test_public_connect_caps_upgrade_by_remaining_deadline(monkeypatch):
+    import time
+
+    disconnected = asyncio.Event()
+
+    async def blackhole(reader, writer):
+        try:
+            await reader.read()
+        finally:
+            writer.close()
+            await writer.wait_closed()
+            disconnected.set()
+
+    hosted = await asyncio.start_server(blackhole, "127.0.0.1", 0)
+    async with hosted:
+        port = hosted.sockets[0].getsockname()[1]
+        offer = _connection.ConnectionOffer(
+            f"wss://127.0.0.1:{port}", "synthetic", time.time() + 100
+        )
+        monkeypatch.setattr(
+            _connection, "wait_for_offer", mock.AsyncMock(return_value=offer)
+        )
+        monkeypatch.setattr(_defaults, "CONNECT_WAIT_SECONDS", 0.03)
+        monkeypatch.setattr(_defaults, "HTTP_TIMEOUT_SECONDS", 2)
+        voice = coval_agent_sdk.CovalVoiceClient(api_key="synthetic")
+
+        async def connect():
+            async with voice.connect("conversation-a"):
+                pytest.fail("An unresponsive TLS endpoint became ready")
+
+        with pytest.raises(
+            coval_agent_sdk.CovalError, match="before the deadline"
+        ):
+            await asyncio.wait_for(connect(), 1)
+        await asyncio.wait_for(disconnected.wait(), 1)

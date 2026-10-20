@@ -9,7 +9,7 @@ Describe the expected behavior and the observed result.
 
 ## Reproduction
 
-Provide the smallest runnable adapter or script using synthetic fixtures. Include the SDK version or commit, Python version, operating system, and the entry point used.
+Provide the smallest runnable audio integration or script using synthetic fixtures. Include the SDK version or commit, Python version, operating system, and the entry point used.
 
 ## Evidence
 

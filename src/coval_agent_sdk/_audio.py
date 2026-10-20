@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import asyncio
-from collections import deque
+import collections
 import time
 
 from websockets.asyncio import client
@@ -69,7 +69,7 @@ class ConnectionState:
         self.simulation_id = simulation_id
         self.websocket: client.ClientConnection | None = None
         self.writer = PcmWriter()
-        self.input: deque[bytes] = deque()
+        self.input: collections.deque[bytes] = collections.deque()
         self.buffered_bytes = 0
         self.input_changed = asyncio.Event()
         self.receiving = False

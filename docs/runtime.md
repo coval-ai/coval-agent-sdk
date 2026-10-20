@@ -28,7 +28,7 @@ Every API request uses the Coval API SDK through a private adapter and carries t
 
 Offer discovery retries documented temporary HTTP/network failures and waits while an attempt is pending, provisioning, or expired and awaiting replacement. A ready offer must contain a secure URL, a nonempty token, and a future expiry. Authentication/permanent failures, unknown states, and attempts that ended before attachment fail visibly.
 
-A live offer may retry network/timeouts and HTTP 500/502/503/504 handshake failures before it is consumed or expires, using the WebSocket library's retry classification. Authentication and other permanent rejections fail immediately. A consumed join is not replayed. A disconnected conversation needs a new simulation attempt rather than an automatic reconnect that could duplicate work.
+A live offer may retry network/timeouts and HTTP 500/502/503/504 handshake failures before it is consumed or expires, using the WebSocket library's retry classification. Each upgrade is capped by the remaining connection deadline, offer lifetime, and HTTP timeout. Authentication and other permanent rejections fail immediately. A consumed join is not replayed. A disconnected conversation needs a new simulation attempt rather than an automatic reconnect that could duplicate work.
 
 ## Deadlines and run monitoring
 
@@ -42,7 +42,7 @@ A live offer may retry network/timeouts and HTTP 500/502/503/504 handshake failu
 | Persisted completion confirmation after relay closure | 10 seconds |
 | WebSocket ping interval / pong timeout | 20 seconds / 20 seconds |
 
-`RunConfig.run_timeout_seconds` changes the batch monitoring deadline. This includes queued conversations and evaluation postprocessing. An expired deadline fails visibly and cancels local sessions; it does not cancel the hosted run. The HTTP launch request has its own request timeout and is never automatically repeated.
+`RunConfig.run_timeout_seconds` changes the batch monitoring deadline. This includes queued conversations and evaluation postprocessing. Polling sleeps are capped by the remaining batch deadline. An expired deadline fails visibly and cancels local sessions; it does not cancel the hosted run. The HTTP launch request has its own request timeout and is never automatically repeated.
 
 Monitoring paginates simulations, defers PENDING/IN QUEUE conversations without starting their per-session connection deadline, attaches each eligible conversation once, and observes the run's terminal status. Queued conversations remain covered by the batch deadline and cannot be omitted from a successful result. A failed local connection or handler cancels and awaits sibling handlers and transports. A completed batch requires a successful run outcome and no conversations missed before attachment; successful dispatch or one completed voice session does not establish that result.
 
@@ -58,7 +58,7 @@ Tracing is optional and requires the `[tracing]` extra. Import the concrete expo
 
 The exporter buffers at most 10,000 ended spans and 10,000 trace metadata entries by default. Tune `max_buffered_spans` and `max_buffered_traces` for the process. Damaged traces retain rejection information so later roots cannot turn an incomplete trace into a successful upload. Uploading spans remain counted against the buffer budget.
 
-Completed conversations are uploaded individually as OTLP protobuf through the private Coval API transport. Each HTTP upload is a single attempt with the normal request timeout; failures return diagnostics without dependency logging or automatic replay. Failed conversations close, flush, and discard their spans. An upload failure after a completed voice session is returned in `SessionResult.trace.error` without rerunning the conversation or cancelling sibling calls; retained spans can be retried explicitly through the exporter. Application and session failures still propagate.
+Completed conversations are uploaded individually as OTLP protobuf through the private Coval API transport. Each HTTP upload is a single attempt with the normal request timeout; failures return diagnostics without dependency logging or automatic replay. Failed conversations close, flush, and discard their spans. A flush or upload failure from the SDK's OpenTelemetry integration after a completed voice session is returned in `SessionResult.trace.error` without rerunning the conversation or cancelling sibling calls; retained spans can be retried explicitly through the exporter. Application and session failures still propagate.
 
 Prompts, transcripts, and model output may appear in spans. Enable export only when that data is intended for Coval, and keep test fixtures synthetic.
 

@@ -95,11 +95,18 @@ class CovalTraceExporter(trace_export.SpanExporter):
             no flush-capable provider is configured or it reports failure.
 
         Raises:
-            Exception: The configured provider raises while flushing.
+            errors.CovalTraceError: The tracing provider fails to flush.
         """
         provider = trace.get_tracer_provider()
         flush = getattr(provider, "force_flush", None)
-        return bool(callable(flush) and flush(timeout_millis=timeout_millis))
+        try:
+            return bool(
+                callable(flush) and flush(timeout_millis=timeout_millis)
+            )
+        except Exception as exception:
+            raise errors.CovalTraceError(
+                f"Trace provider flush failed: {exception}"
+            ) from exception
 
     def export(
         self, spans: Sequence[sdk_trace.ReadableSpan]

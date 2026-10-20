@@ -473,8 +473,11 @@ def test_exporter_flush_delegates_to_the_configured_provider(
         provider.force_flush.side_effect = RuntimeError("provider flush failed")
     monkeypatch.setattr(tracing.trace, "get_tracer_provider", lambda: provider)
     if outcome == "error":
-        with pytest.raises(RuntimeError, match="provider flush failed"):
+        with pytest.raises(
+            errors.CovalTraceError, match="provider flush failed"
+        ) as raised:
             exporter.flush(timeout_millis=777)
+        assert raised.value.__cause__ is provider.force_flush.side_effect
     else:
         assert exporter.flush(timeout_millis=777) is (
             False if outcome == "missing" else outcome

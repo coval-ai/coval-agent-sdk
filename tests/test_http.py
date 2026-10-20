@@ -164,15 +164,26 @@ async def test_public_run_launch_is_not_retried(endpoint, drop):
     with pytest.raises(expected) as failure:
         await voice.run(
             coval_agent_sdk.RunConfig(
-                agent_id="agent-a", persona_id="persona-a", test_set_id="set-a"
+                agent_id="agent-a",
+                persona_id="persona-b",
+                test_set_id="set-c",
+                iterations=3,
+                concurrency=2,
+                dev_id="lane-d",
             ),
-            lambda _: pytest.fail("Launch failed before agent creation"),
+            lambda _: pytest.fail("Launch failed before an audio connection"),
         )
     assert type(failure.value).__module__ == "coval_agent_sdk.errors"
     assert not hasattr(voice, "api")
     assert len(requests) == 1
     assert requests[0][0:2] == ("POST", "/v1/runs")
-    assert json.loads(requests[0][3])["agent_id"] == "agent-a"
+    assert json.loads(requests[0][3]) == {
+        "agent_id": "agent-a",
+        "persona_id": "persona-b",
+        "test_set_id": "set-c",
+        "options": {"iteration_count": 3, "concurrency": 2},
+        "dev_id": "lane-d",
+    }
     if not drop:
         assert failure.value.status_code == 503
         assert "temporary outage" in str(failure.value)

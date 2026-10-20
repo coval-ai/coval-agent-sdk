@@ -173,7 +173,14 @@ async def _launch_and_run(
             task.done() for task in active.values()
         ):
             break
-        await asyncio.sleep(_defaults.POLL_INTERVAL_SECONDS)
+        await asyncio.sleep(
+            max(
+                0.0,
+                min(
+                    _defaults.POLL_INTERVAL_SECONDS, deadline - time.monotonic()
+                ),
+            )
+        )
     if time.monotonic() >= deadline:
         raise errors.TunnelError(
             f"Run {run_id} did not finish within "

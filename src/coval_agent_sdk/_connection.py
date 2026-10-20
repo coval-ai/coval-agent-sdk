@@ -117,19 +117,20 @@ async def open_voice_connection(
                 f"connect deadline."
             ) from exception
         while time.time() < offer.expires_at and time.monotonic() < deadline:
+            upgrade_timeout = min(
+                _defaults.HTTP_TIMEOUT_SECONDS,
+                offer.expires_at - time.time(),
+                deadline - time.monotonic(),
+            )
+            if upgrade_timeout <= 0:
+                break
             try:
                 return await client.connect(
                     offer.wss_url,
                     additional_headers={
                         "Authorization": f"Bearer {offer.token}"
                     },
-                    open_timeout=max(
-                        1.0,
-                        min(
-                            _defaults.HTTP_TIMEOUT_SECONDS,
-                            offer.expires_at - time.time(),
-                        ),
-                    ),
+                    open_timeout=upgrade_timeout,
                     ping_interval=_defaults.WEBSOCKET_PING_INTERVAL_SECONDS,
                     ping_timeout=_defaults.WEBSOCKET_PING_TIMEOUT_SECONDS,
                     max_size=_defaults.VOICE_SAMPLE_RATE_HZ

@@ -572,3 +572,163 @@ async def test_real_conversation_span_ends_before_optional_upload(monkeypatch):
         assert delivered[0].end_time is not None
     finally:
         provider.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_polling_sleep_cannot_outlive_short_run_deadline(monkeypatch):
+    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic")
+    monkeypatch.setattr(
+        client._api,
+        "post",
+        mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
+    )
+
+    async def read(path, *, query=None):
+        if path == "simulations":
+            return {
+                "simulations": [
+                    {"simulation_id": "conversation-a", "status": "PENDING"}
+                ]
+            }
+        return {"run": {"status": "RUNNING"}}
+
+    monkeypatch.setattr(client._api, "get", read)
+    monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 2)
+    handler = mock.AsyncMock()
+    with pytest.raises(
+        coval_agent_sdk.RunError, match="did not finish within"
+    ) as raised:
+        await asyncio.wait_for(
+            client.run(
+                coval_agent_sdk.RunConfig(
+                    "agent-a", "persona-a", "set-a", run_timeout_seconds=0.01
+                ),
+                handler,
+            ),
+            1,
+        )
+    assert raised.value.result == coval_agent_sdk.RunResult(
+        "run-a", "RUNNING", ()
+    )
+    handler.assert_not_called()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("application_failure", [False, True])
+async def test_provider_flush_failure_preserves_voice_or_application_error(
+    monkeypatch, caplog, capsys, application_failure
+):
+    from opentelemetry.sdk import trace as sdk_trace
+    from opentelemetry.sdk.trace import export as trace_export
+
+    from coval_agent_sdk import tracing
+
+    class FailingProcessor(sdk_trace.SpanProcessor):
+        def on_start(self, *args, **kwargs):
+            pass
+
+        def on_end(self, *args, **kwargs):
+            pass
+
+        def shutdown(self):
+            pass
+
+        def force_flush(self, timeout_millis=30000):
+            raise RuntimeError("synthetic processor flush failed")
+
+    exporter = tracing.CovalTraceExporter()
+    provider = sdk_trace.TracerProvider()
+    provider.add_span_processor(trace_export.SimpleSpanProcessor(exporter))
+    provider.add_span_processor(FailingProcessor())
+    monkeypatch.setattr(tracing.trace, "get_tracer_provider", lambda: provider)
+    upload = mock.Mock()
+    monkeypatch.setattr(tracing, "_upload_spans", upload)
+    client = coval_agent_sdk.CovalVoiceClient(
+        api_key="synthetic", trace_exporter=exporter
+    )
+    sockets = setup_run(monkeypatch, client)
+    original = RuntimeError("application failed")
+
+    async def connect():
+        async with client.connect("conversation-a") as connection:
+            span = provider.get_tracer(__name__).start_span(
+                "conversation",
+                attributes={"conversation.id": connection.simulation_id},
+            )
+            try:
+                await handle(connection)
+                if application_failure:
+                    raise original
+            finally:
+                span.end()
+        return connection.result
+
+    try:
+        if application_failure:
+            with pytest.raises(RuntimeError) as raised:
+                await connect()
+            assert raised.value is original
+            assert exporter._buffered_span_count == 0
+        else:
+            result = await connect()
+            assert result.status == "COMPLETED"
+            assert result.trace.uploaded_spans is None
+            assert "synthetic processor flush failed" in result.trace.error
+            upload.assert_not_called()
+            assert (
+                exporter.upload(
+                    simulation_id="conversation-a",
+                    api_base_url="https://api.coval.dev/v1",
+                    api_key="synthetic",
+                )
+                == 1
+            )
+        assert sockets["conversation-a"].closed
+        assert caplog.records == []
+        assert capsys.readouterr() == ("", "")
+    finally:
+        provider.shutdown()
+
+
+@pytest.mark.asyncio
+async def test_custom_exporter_error_keeps_application_exception_identity(
+    monkeypatch,
+):
+    original = RuntimeError("custom exporter failed")
+    exporter = mock.Mock()
+    exporter.flush.side_effect = original
+    client = coval_agent_sdk.CovalVoiceClient(
+        api_key="synthetic", trace_exporter=exporter
+    )
+    sockets = setup_run(monkeypatch, client)
+    with pytest.raises(RuntimeError) as raised:
+        async with client.connect("conversation-a") as connection:
+            await handle(connection)
+    assert raised.value is original
+    assert connection.result is None
+    assert sockets["conversation-a"].closed
+
+
+@pytest.mark.parametrize(
+    ("field", "value"),
+    [
+        ("agent_id", ""),
+        ("persona_id", ""),
+        ("test_set_id", ""),
+        ("iterations", 0),
+        ("concurrency", 0),
+        ("run_timeout_seconds", 0),
+        ("run_timeout_seconds", -1),
+        ("run_timeout_seconds", float("inf")),
+        ("run_timeout_seconds", float("nan")),
+    ],
+)
+def test_invalid_public_run_configuration_is_rejected(field, value):
+    values = {
+        "agent_id": "agent-a",
+        "persona_id": "persona-a",
+        "test_set_id": "set-a",
+    }
+    values[field] = value
+    with pytest.raises(ValueError, match=field):
+        coval_agent_sdk.RunConfig(**values)
