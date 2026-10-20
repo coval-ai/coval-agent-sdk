@@ -53,7 +53,7 @@ class CovalApi:
             The decoded JSON object.
 
         Raises:
-            errors.TunnelError: The request fails or returns non-object JSON.
+            errors.CovalError: The request fails or returns non-object JSON.
         """
         return await asyncio.to_thread(
             self._request_json, "GET", path, query, None
@@ -70,7 +70,7 @@ class CovalApi:
             The decoded JSON response object.
 
         Raises:
-            errors.TunnelError: The request fails or returns non-object JSON.
+            errors.CovalError: The request fails or returns non-object JSON.
         """
         return await asyncio.to_thread(
             self._request_json, "POST", path, None, payload
@@ -87,7 +87,7 @@ class CovalApi:
             headers: Additional endpoint-specific headers.
 
         Raises:
-            errors.TunnelError: The API rejects or cannot receive the request.
+            errors.CovalError: The API rejects or cannot receive the request.
         """
         self._request(
             "POST",
@@ -109,11 +109,11 @@ class CovalApi:
         try:
             response_payload: object = json.loads(body)
         except (ValueError, UnicodeError):
-            raise errors.TunnelError(
+            raise errors.CovalError(
                 f"Coval {method} {path} returned invalid JSON."
             ) from None
         if not isinstance(response_payload, dict):
-            raise errors.TunnelError(
+            raise errors.CovalError(
                 f"Coval {method} {path} returned a non-object JSON response."
             )
         return cast(dict[str, Any], response_payload)

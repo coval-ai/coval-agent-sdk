@@ -27,15 +27,28 @@ def test_public_facade_exports_the_documented_definitions():
         "RunConfig": config.RunConfig,
         "RunError": errors.RunError,
         "RunResult": results.RunResult,
-        "SessionResult": results.SessionResult,
+        "ConversationResult": results.ConversationResult,
         "TraceResult": results.TraceResult,
         "TraceExporter": telemetry.TraceExporter,
         "AudioConnection": audio.AudioConnection,
-        "TunnelError": errors.TunnelError,
     }
     assert set(coval_agent_sdk.__all__) == set(expected)
     for name, definition in expected.items():
         assert getattr(coval_agent_sdk, name) is definition
+
+
+@pytest.mark.parametrize(
+    ("module", "name"),
+    [
+        (coval_agent_sdk, "SessionResult"),
+        (results, "SessionResult"),
+        (coval_agent_sdk, "TunnelError"),
+        (errors, "TunnelError"),
+    ],
+)
+def test_removed_public_names_have_no_compatibility_alias(module, name):
+    with pytest.raises(AttributeError):
+        getattr(module, name)
 
 
 def test_distribution_includes_types_and_no_tests_or_backend():

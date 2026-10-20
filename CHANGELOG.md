@@ -4,6 +4,8 @@ User-facing changes are recorded here. This project is in pre-release developmen
 
 ## Unreleased
 
+- Standardize conversation outcomes on `ConversationResult` and SDK errors on `CovalError`.
+
 - Keep relay upgrades and polling within the remaining connection/run deadlines. Return OpenTelemetry processor flush failures as trace diagnostics after completed voice transport.
 
 - Expose framework-independent AudioConnection contexts and async run handlers; applications own their pipelines without SDK agent classes or factories. Bound incoming audio and pace serialized writes, preserving cleanup, results, and optional traces.

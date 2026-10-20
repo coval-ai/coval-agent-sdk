@@ -45,7 +45,7 @@ async def _get_monitoring_resource(
         except errors.CovalConnectionError as exception:
             last_error = exception
         except asyncio.TimeoutError as exception:
-            raise errors.TunnelError(
+            raise errors.CovalError(
                 f"Coval monitoring GET {path} exceeded its retry deadline."
             ) from exception
         await asyncio.sleep(
@@ -57,7 +57,7 @@ async def _get_monitoring_resource(
                 ),
             )
         )
-    raise errors.TunnelError(
+    raise errors.CovalError(
         f"Coval monitoring GET {path} exceeded its retry deadline."
     ) from last_error
 
@@ -76,10 +76,10 @@ class _RunState:
             status: Untrusted status field from a monitoring response.
 
         Raises:
-            errors.TunnelError: The response has no string status.
+            errors.CovalError: The response has no string status.
         """
         if not isinstance(status, str):
-            raise errors.TunnelError("Run monitoring returned no status.")
+            raise errors.CovalError("Run monitoring returned no status.")
         self.status = status
 
 
@@ -90,7 +90,7 @@ async def launch_and_run(
     trace_exporter: telemetry.TraceExporter | None = None,
 ) -> results.RunResult:
     """Launch once and retain completed outcomes through run failures."""
-    active: dict[str, asyncio.Task[results.SessionResult]] = {}
+    active: dict[str, asyncio.Task[results.ConversationResult]] = {}
     state = _RunState()
     try:
         try:
@@ -117,8 +117,8 @@ async def launch_and_run(
 
 
 def _completed_sessions(
-    active: dict[str, asyncio.Task[results.SessionResult]],
-) -> tuple[results.SessionResult, ...]:
+    active: dict[str, asyncio.Task[results.ConversationResult]],
+) -> tuple[results.ConversationResult, ...]:
     """Collect successful local outcomes without consuming failed tasks."""
     return tuple(
         task.result()
@@ -132,7 +132,7 @@ async def _launch_and_run(
     config: run_config.RunConfig,
     on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
     trace_exporter: telemetry.TraceExporter | None,
-    active: dict[str, asyncio.Task[results.SessionResult]],
+    active: dict[str, asyncio.Task[results.ConversationResult]],
     state: _RunState,
 ) -> results.RunResult:
     """Monitor the launched run while the caller owns task cleanup."""
@@ -151,7 +151,7 @@ async def _launch_and_run(
     launch_run: dict[str, Any] = launch_response.get("run") or {}
     run_id = launch_run.get("run_id")
     if not isinstance(run_id, str) or not run_id:
-        raise errors.TunnelError("POST /runs returned no run.run_id.")
+        raise errors.CovalError("POST /runs returned no run.run_id.")
     state.run_id = run_id
     seen: set[str] = set()
     deadline = time.monotonic() + config.run_timeout_seconds
@@ -182,17 +182,17 @@ async def _launch_and_run(
             )
         )
     if time.monotonic() >= deadline:
-        raise errors.TunnelError(
+        raise errors.CovalError(
             f"Run {run_id} did not finish within "
             f"{config.run_timeout_seconds:g} "
             f"seconds."
         )
     if not active:
-        raise errors.TunnelError(
+        raise errors.CovalError(
             f"Run {run_id} finished without a voice session to attach."
         )
     if len(active) != len(seen):
-        raise errors.TunnelError(
+        raise errors.CovalError(
             f"Run {run_id} had "
             f"{len(seen) - len(active)} "
             f"conversation(s) that were not attached before the run ended."
@@ -200,7 +200,7 @@ async def _launch_and_run(
     for task in active.values():
         await task
     if run_status != "COMPLETED":
-        raise errors.TunnelError(
+        raise errors.CovalError(
             f"Run {run_id} finished with status {run_status}."
         )
 
@@ -218,7 +218,7 @@ async def _attach_simulations(
     on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
     trace_exporter: telemetry.TraceExporter | None,
     seen: set[str],
-    active: dict[str, asyncio.Task[results.SessionResult]],
+    active: dict[str, asyncio.Task[results.ConversationResult]],
 ) -> None:
     """Discover every page and record each fresh task before monitoring resumes.
 

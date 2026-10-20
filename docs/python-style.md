@@ -58,7 +58,7 @@ async def connect(simulation_id: str) -> None:
         simulation_id: Identifier of the hosted conversation to attach to.
 
     Raises:
-        errors.TunnelError: Discovery or relay negotiation fails.
+        errors.CovalError: Discovery or relay negotiation fails.
     """
 ```
 

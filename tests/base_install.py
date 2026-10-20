@@ -120,14 +120,18 @@ class BaseInstallationTest(unittest.IsolatedAsyncioTestCase):
                 2,
             )
         self.assertEqual(
-            session, coval_agent_sdk.SessionResult("direct-a", 640, 640)
+            session, coval_agent_sdk.ConversationResult("direct-a", 640, 640)
         )
         self.assertEqual(
             run,
             coval_agent_sdk.RunResult(
                 "run-a",
                 "COMPLETED",
-                (coval_agent_sdk.SessionResult("conversation-a", 640, 640),),
+                (
+                    coval_agent_sdk.ConversationResult(
+                        "conversation-a", 640, 640
+                    ),
+                ),
             ),
         )
         self.assertTrue(all(socket.closed for socket in sockets))

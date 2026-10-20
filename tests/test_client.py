@@ -91,7 +91,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                             }
                         }
 
-                async def session(*args) -> results.SessionResult:
+                async def session(*args) -> results.ConversationResult:
                     nonlocal cancelled
                     if expires:  # noqa: B023 - The session is awaited within this case.
                         try:
@@ -99,7 +99,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                         except asyncio.CancelledError:
                             cancelled = True
                             raise
-                    return results.SessionResult("attached", 0, 0)
+                    return results.ConversationResult("attached", 0, 0)
 
                 config = run_config.RunConfig(
                     agent_id="agent",
@@ -172,14 +172,14 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 session_finished.set()
                 return {"run": {"status": "COMPLETED"}}
 
-        async def session(*args) -> results.SessionResult:
+        async def session(*args) -> results.ConversationResult:
             nonlocal session_cancelled
             try:
                 await session_finished.wait()
             except asyncio.CancelledError:
                 session_cancelled = True
                 raise
-            return results.SessionResult("attached", 0, 0)
+            return results.ConversationResult("attached", 0, 0)
 
         api = MonitoringApi()
         config = run_config.RunConfig(
@@ -257,9 +257,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                         ),
                     ),
                     mock.patch.object(asyncio, "sleep", new=mock.AsyncMock()),
-                    self.assertRaisesRegex(
-                        errors.TunnelError, "retry deadline"
-                    ),
+                    self.assertRaisesRegex(errors.CovalError, "retry deadline"),
                 ):
                     await _runs._get_monitoring_resource(
                         api, "runs/run-1", run_deadline=remaining_run_seconds
@@ -286,7 +284,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
             mock.patch.object(
                 _defaults, "MONITORING_RETRY_SECONDS", short_retry_seconds
             ),
-            self.assertRaisesRegex(errors.TunnelError, "retry deadline"),
+            self.assertRaisesRegex(errors.CovalError, "retry deadline"),
         ):
             await _runs._get_monitoring_resource(
                 api, "runs/run-1", run_deadline=run_deadline
@@ -336,7 +334,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 )
                 with (
                     mock.patch.object(asyncio, "sleep", new=mock.AsyncMock()),
-                    self.assertRaisesRegex(errors.TunnelError, status),
+                    self.assertRaisesRegex(errors.CovalError, status),
                 ):
                     await _connection.wait_for_offer(api, "simulation-1")
 
@@ -402,7 +400,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                     ),
                     mock.patch.object(asyncio, "sleep", new=mock.AsyncMock()),
                     self.assertRaisesRegex(
-                        errors.TunnelError, "did not publish"
+                        errors.CovalError, "did not publish"
                     ),
                 ):
                     await _connection.wait_for_offer(api, "simulation-1")
@@ -449,7 +447,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
             ),
             mock.patch.object(_connection, "wait_for_offer", timed_out_offer),
             self.assertRaisesRegex(
-                errors.TunnelError, "connect deadline"
+                errors.CovalError, "connect deadline"
             ) as raised,
         ):
             await _connection.open_voice_connection(mock.Mock(), "simulation-1")
@@ -533,7 +531,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                     mock.patch.object(
                         asyncio, "sleep", new=mock.AsyncMock()
                     ) as sleep,
-                    self.assertRaises(errors.TunnelError) as raised,
+                    self.assertRaises(errors.CovalError) as raised,
                 ):
                     await _connection.open_voice_connection(
                         mock.Mock(), "simulation-1"
@@ -552,7 +550,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         ) -> None:
             if simulation_id == "broken":
                 await waiting_started.wait()
-                raise errors.TunnelError("session failed")
+                raise errors.CovalError("session failed")
             waiting_started.set()
             try:
                 await asyncio.Event().wait()
@@ -565,7 +563,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         with (
             mock.patch.object(_session, "run_session", fake_run_session),
             mock.patch.object(_defaults, "POLL_INTERVAL_SECONDS", 0),
-            self.assertRaisesRegex(errors.TunnelError, "session failed"),
+            self.assertRaisesRegex(errors.CovalError, "session failed"),
         ):
             await _runs.launch_and_run(FakeApi(), config, lambda _id: None)
 
@@ -606,7 +604,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 with (
                     mock.patch.object(_session, "run_session", run_session),
                     self.assertRaisesRegex(
-                        errors.TunnelError,
+                        errors.CovalError,
                         ("1 conversation.*not attached before the run ended"),
                     ),
                 ):

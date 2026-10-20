@@ -11,7 +11,6 @@ import coval_agent_sdk
     "failure",
     [
         coval_agent_sdk.CovalError("SDK failed"),
-        coval_agent_sdk.TunnelError("relay failed"),
         coval_agent_sdk.CovalHttpError(status_code=403, message="denied"),
         coval_agent_sdk.CovalConnectionError("unreachable"),
         coval_agent_sdk.CovalTraceError("upload failed"),
@@ -33,3 +32,16 @@ def test_shared_base_catches_existing_specific_errors(failure):
 )
 def test_application_failures_are_outside_sdk_error_hierarchy(failure):
     assert not isinstance(failure, coval_agent_sdk.CovalError)
+
+
+@pytest.mark.parametrize(
+    "error_type",
+    [
+        coval_agent_sdk.CovalHttpError,
+        coval_agent_sdk.CovalConnectionError,
+        coval_agent_sdk.CovalTraceError,
+        coval_agent_sdk.RunError,
+    ],
+)
+def test_specific_errors_inherit_directly_from_the_shared_base(error_type):
+    assert error_type.__bases__ == (coval_agent_sdk.CovalError,)

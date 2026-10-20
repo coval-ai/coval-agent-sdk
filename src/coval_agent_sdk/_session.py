@@ -40,7 +40,7 @@ async def open_session(
         if session.state.error is not None:
             raise session.state.error
         if not session.state.completed:
-            raise errors.TunnelError(
+            raise errors.CovalError(
                 f"Simulation {simulation_id} audio context exited "
                 "before the conversation completed."
             )
@@ -56,7 +56,7 @@ async def run_session(
     simulation_id: str,
     on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
     trace_exporter: telemetry.TraceExporter | None = None,
-) -> results.SessionResult:
+) -> results.ConversationResult:
     """Run an application handler while observing transport failures."""
     async with open_session(api, simulation_id, trace_exporter) as connection:
         handling = asyncio.ensure_future(on_connection(connection))
@@ -74,9 +74,7 @@ async def run_session(
                     task.cancel()
             await asyncio.gather(handling, closing, return_exceptions=True)
     if connection.result is None:
-        raise errors.TunnelError(
-            "The audio connection has no completed result."
-        )
+        raise errors.CovalError("The audio connection has no completed result.")
     return connection.result
 
 
@@ -109,7 +107,7 @@ class _Session:
             if self.state.error is not None:
                 raise self.state.error
             if not self.state.ready.is_set():
-                raise errors.TunnelError(
+                raise errors.CovalError(
                     "The relay closed before session_ready."
                 )
         finally:
@@ -132,7 +130,7 @@ class _Session:
             ):
                 self.state.completed = True
             else:
-                failure = errors.TunnelError(
+                failure = errors.CovalError(
                     f"Simulation {self.connection.simulation_id} relay closed "
                     f"without completion (code {close_code})."
                 )
@@ -162,7 +160,7 @@ class _Session:
                             max(0.0, deadline - time.monotonic()),
                         )
                 except asyncio.TimeoutError as exception:
-                    raise errors.TunnelError(
+                    raise errors.CovalError(
                         "Voice relay did not send session_ready within "
                         f"{_defaults.CONNECT_WAIT_SECONDS} seconds."
                     ) from exception
@@ -174,11 +172,11 @@ class _Session:
                         return
                 else:
                     if not self.state.ready.is_set():
-                        raise errors.TunnelError(
+                        raise errors.CovalError(
                             "Audio arrived before session_ready."
                         )
                     if len(message) % _defaults.VOICE_SAMPLE_WIDTH_BYTES:
-                        raise errors.TunnelError(
+                        raise errors.CovalError(
                             "Incoming PCM16 requires even bytes."
                         )
                     self.state.feed_audio(message)
@@ -195,39 +193,39 @@ class _Session:
         ):
             self.state.completed = True
             return
-        raise errors.TunnelError("Voice relay closed before session_end.")
+        raise errors.CovalError("Voice relay closed before session_end.")
 
     def _control(self, message: str) -> None:
         """Require one valid readiness frame before successful completion."""
         try:
             control = json.loads(message)
         except json.JSONDecodeError:
-            raise errors.TunnelError(
+            raise errors.CovalError(
                 "Relay returned invalid control JSON."
             ) from None
         if not isinstance(control, dict):
-            raise errors.TunnelError("Relay returned invalid control JSON.")
+            raise errors.CovalError("Relay returned invalid control JSON.")
         control = cast(dict[str, Any], control)
         message_type = control.get("type")
         if message_type == "session_ready":
             if self.state.ready.is_set():
-                raise errors.TunnelError("Relay repeated session_ready.")
+                raise errors.CovalError("Relay repeated session_ready.")
             if control.get("audio") != {
                 "encoding": "pcm_s16le",
                 "sample_rate_hz": _defaults.VOICE_SAMPLE_RATE_HZ,
                 "channels": _defaults.VOICE_CHANNEL_COUNT,
             }:
-                raise errors.TunnelError(
+                raise errors.CovalError(
                     "Relay requires an unsupported audio format."
                 )
             self.state.ready.set()
         elif message_type == "session_end":
             if not self.state.ready.is_set():
-                raise errors.TunnelError("Relay ended before session_ready.")
+                raise errors.CovalError("Relay ended before session_ready.")
             self.state.completed = True
             self.state.finish()
         elif message_type == "error":
-            raise errors.TunnelError(f"Relay error: {control.get('message')}")
+            raise errors.CovalError(f"Relay error: {control.get('message')}")
 
     async def close(self, primary_error: BaseException | None) -> None:
         """Release transport and traces while preserving application errors."""
@@ -250,7 +248,7 @@ class _Session:
         if transport_error is not None:
             raise transport_error
         if successful:
-            self.state.result = results.SessionResult(
+            self.state.result = results.ConversationResult(
                 simulation_id=self.connection.simulation_id,
                 received_audio_bytes=self.state.received_bytes,
                 sent_audio_bytes=self.state.writer.sent_bytes,
@@ -326,7 +324,7 @@ async def _confirm_completed_after_close(
                 api.get(f"simulations/{parse.quote(simulation_id, safe='')}"),
                 timeout=remaining_seconds,
             )
-        except (errors.TunnelError, json.JSONDecodeError, asyncio.TimeoutError):
+        except (errors.CovalError, json.JSONDecodeError, asyncio.TimeoutError):
             return False
         simulation = response.get("simulation")
         if not isinstance(simulation, dict):
