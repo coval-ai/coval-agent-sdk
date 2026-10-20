@@ -1,181 +1,101 @@
-"""Pace outbound PCM16 audio at the relay sample rate."""
+"""Validate and pace serialized outbound PCM16 audio."""
 
 from __future__ import annotations
 
 import asyncio
+from collections import deque
 import time
 
 from websockets.asyncio import client
 
 from coval_agent_sdk import _defaults
-from coval_agent_sdk import _exceptions
-from coval_agent_sdk import agent as agent_contract
 from coval_agent_sdk import errors
+from coval_agent_sdk import results
 
 
-async def send_paced_audio(
-    websocket: client.ClientConnection,
-    audio: bytes,
-    *,
-    next_send_at: float | None = None,
-) -> float:
-    """Send PCM16 in real-time chunks without flooding the worker.
+def validate_audio(audio: object) -> None:
+    """Reject invalid or oversized application audio before any wire write.
 
     Args:
-        websocket: Connected relay socket.
-        audio: Even-length PCM16 mono 16 kHz bytes.
-        next_send_at: Previous chunk's pacing deadline, or None for a new
-            stream.
-
-    Returns:
-        The monotonic deadline for sending the next chunk.
+        audio: PCM16 little-endian mono 16 kHz bytes.
 
     Raises:
-        errors.TunnelError: Audio contains an incomplete PCM16 sample.
+        errors.TunnelError: Audio is malformed or exceeds the 2 MiB limit.
     """
-    if len(audio) % _defaults.VOICE_SAMPLE_WIDTH_BYTES:
-        raise errors.TunnelError(
-            f"Agent returned {len(audio)} bytes of "
-            f"PCM16 audio; an even byte count is "
-            f"required."
-        )
-    if next_send_at is None:
-        next_send_at = time.monotonic()
-    for offset in range(0, len(audio), _defaults.VOICE_CHUNK_BYTES):
-        chunk = audio[offset : offset + _defaults.VOICE_CHUNK_BYTES]
-        await asyncio.sleep(max(0.0, next_send_at - time.monotonic()))
-        await websocket.send(chunk)
-        next_send_at = max(next_send_at, time.monotonic()) + len(chunk) / (
-            _defaults.VOICE_SAMPLE_RATE_HZ
-            * _defaults.VOICE_CHANNEL_COUNT
-            * _defaults.VOICE_SAMPLE_WIDTH_BYTES
-        )
-    return next_send_at
-
-
-class OutputAudio:
-    """Own a session's bounded output queue and streaming producer.
-
-    Attributes:
-        sent_pcm_bytes: Number of bytes sent successfully to the relay.
-    """
-
-    def __init__(
-        self,
-        adapter: agent_contract.VoiceAgent | agent_contract.StreamingVoiceAgent,
-        simulation_id: str,
-    ) -> None:
-        """Initialize output accounting for one conversation.
-
-        Args:
-            adapter: Fresh per-conversation callback or streaming agent.
-            simulation_id: Identifier used in failure diagnostics.
-        """
-        self._agent = adapter
-        self._simulation_id = simulation_id
-        self.sent_pcm_bytes = 0
-        self._pending_reply_bytes = 0
-        self._replies: asyncio.Queue[bytes] = asyncio.Queue(
-            maxsize=_defaults.MAX_PENDING_REPLIES
-        )
-
-    def queue_reply(self, audio: bytes) -> None:
-        """Enqueue a callback reply while counting queued and in-flight bytes.
-
-        Args:
-            audio: Callback output to send after readiness.
-
-        Raises:
-            errors.TunnelError: The byte or reply-count budget is exhausted.
-        """
-        audio = _validate_chunk(audio)
-        if (
-            self._pending_reply_bytes + len(audio)
-            > _defaults.MAX_PENDING_REPLY_BYTES
-            or self._replies.full()
-        ):
-            raise errors.TunnelError(
-                f"Simulation {self._simulation_id} "
-                f"agent replies exceeded the "
-                f"bounded audio send queue."
-            )
-        self._pending_reply_bytes += len(audio)
-        self._replies.put_nowait(audio)
-
-    async def _send_replies(self, websocket: client.ClientConnection) -> None:
-        next_send_at: float | None = None
-        while True:
-            audio = await self._replies.get()
-            next_send_at = await send_paced_audio(
-                websocket, audio, next_send_at=next_send_at
-            )
-            self.sent_pcm_bytes += len(audio)
-            self._pending_reply_bytes -= len(audio)
-
-    async def _send_stream(self, websocket: client.ClientConnection) -> None:
-        if not isinstance(self._agent, agent_contract.StreamingVoiceAgent):
-            raise TypeError("Streaming audio requires a StreamingVoiceAgent.")
-        stream = self._agent.audio_output()
-        next_send_at: float | None = None
-        primary_error: BaseException | None = None
-        try:
-            async for chunk in stream:
-                audio = _validate_chunk(chunk)
-                if len(audio) > _defaults.MAX_PENDING_REPLY_BYTES:
-                    raise errors.TunnelError(
-                        "Agent output chunk exceeds the 2 MiB limit; "
-                        "yield smaller chunks."
-                    )
-                if audio:
-                    next_send_at = await send_paced_audio(
-                        websocket, audio, next_send_at=next_send_at
-                    )
-                    self.sent_pcm_bytes += len(audio)
-                else:
-                    await asyncio.sleep(0)
-            raise errors.TunnelError(
-                f"Simulation {self._simulation_id} agent "
-                f"audio stream ended before session_end."
-            )
-        except BaseException as exception:
-            primary_error = exception
-            raise
-        finally:
-            close_stream = getattr(stream, "aclose", None)
-            if close_stream is not None:
-                try:
-                    await close_stream()
-                except BaseException as exception:
-                    if primary_error is None:
-                        raise
-                    _exceptions.add_cleanup_note(
-                        primary_error,
-                        f"Audio stream cleanup also failed: {exception!r}",
-                    )
-
-    async def send(
-        self, websocket: client.ClientConnection, ready: asyncio.Event
-    ) -> None:
-        """Start the selected output producer after agent readiness.
-
-        Args:
-            websocket: Connected relay socket owned by the session.
-            ready: Event set after the agent finishes on_ready().
-        """
-        await ready.wait()
-        if isinstance(self._agent, agent_contract.StreamingVoiceAgent):
-            await self._send_stream(websocket)
-        else:
-            await self._send_replies(websocket)
-
-
-def _validate_chunk(audio: object) -> bytes:
-    """Reject malformed output from adapters that violate the typed contract."""
     if (
         not isinstance(audio, bytes)
         or len(audio) % _defaults.VOICE_SAMPLE_WIDTH_BYTES
     ):
+        raise errors.TunnelError("Audio must be even-length PCM16 bytes.")
+    if len(audio) > _defaults.MAX_SEND_BYTES:
         raise errors.TunnelError(
-            "Agent output must be even-length PCM16 bytes."
+            "Audio exceeds the 2 MiB limit; send smaller chunks."
         )
-    return audio
+
+
+class PcmWriter:
+    """Own output serialization, cross-call pacing, and exact sent counts."""
+
+    def __init__(self) -> None:
+        self._lock = asyncio.Lock()
+        self._next_send_at = 0.0
+        self.sent_bytes = 0
+
+    async def send(
+        self, websocket: client.ClientConnection, audio: bytes
+    ) -> None:
+        """Send validated chunks while retaining pacing between callers."""
+        async with self._lock:
+            for offset in range(0, len(audio), _defaults.VOICE_CHUNK_BYTES):
+                chunk = audio[offset : offset + _defaults.VOICE_CHUNK_BYTES]
+                await asyncio.sleep(
+                    max(0.0, self._next_send_at - time.monotonic())
+                )
+                await websocket.send(chunk)
+                self.sent_bytes += len(chunk)
+                self._next_send_at = max(
+                    self._next_send_at, time.monotonic()
+                ) + len(chunk) / (
+                    _defaults.VOICE_SAMPLE_RATE_HZ
+                    * _defaults.VOICE_CHANNEL_COUNT
+                    * _defaults.VOICE_SAMPLE_WIDTH_BYTES
+                )
+
+
+class ConnectionState:
+    """Private shared transport state; never exported by the public facade."""
+
+    def __init__(self, simulation_id: str) -> None:
+        self.simulation_id = simulation_id
+        self.websocket: client.ClientConnection | None = None
+        self.writer = PcmWriter()
+        self.input: deque[bytes] = deque()
+        self.buffered_bytes = 0
+        self.input_changed = asyncio.Event()
+        self.receiving = False
+        self.ready = asyncio.Event()
+        self.closed = asyncio.Event()
+        self.error: BaseException | None = None
+        self.completed = False
+        self.received_bytes = 0
+        self.result: results.SessionResult | None = None
+
+    def feed_audio(self, audio: bytes) -> None:
+        """Bound unread audio without blocking terminal control frames."""
+        if self.buffered_bytes + len(audio) > _defaults.MAX_RECEIVE_BYTES:
+            raise errors.TunnelError(
+                "Unread audio exceeded the 64 KiB receive buffer; "
+                "drain receive_audio() promptly into a bounded pipeline."
+            )
+        self.received_bytes += len(audio)
+        self.buffered_bytes += len(audio)
+        if audio:
+            self.input.append(audio)
+            self.input_changed.set()
+
+    def finish(self, error: BaseException | None = None) -> None:
+        """Wake readers and writers without manufacturing success."""
+        if self.error is None:
+            self.error = error
+        self.closed.set()
+        self.input_changed.set()

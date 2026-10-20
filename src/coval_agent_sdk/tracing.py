@@ -196,11 +196,10 @@ class CovalTraceExporter(trace_export.SpanExporter):
             return
 
     def discard(self, *, simulation_id: str) -> None:
-        """Discard a failed conversation after agent closure and span flush.
+        """Discard failed traces after application cleanup and span flush.
 
         Args:
-            simulation_id: Conversation identifier supplied to the agent
-                factory.
+            simulation_id: Conversation identifier from the audio connection.
         """
         with self._lock:
             trace_ids = [
@@ -227,13 +226,12 @@ class CovalTraceExporter(trace_export.SpanExporter):
     ) -> int:
         """Upload only the completed conversation's spans, retaining failures.
 
-        Call after the agent has closed and its spans have been flushed. This is
+        Call after application cleanup and its spans have been flushed. This is
         a blocking operation; async callers must run it in a worker thread. A
         failed upload can be retried without rerunning the voice conversation.
 
         Args:
-            simulation_id: Conversation identifier supplied to the agent
-                factory.
+            simulation_id: Conversation identifier from the audio connection.
             api_base_url: API root including the version path.
             api_key: Organization API key for the target workspace.
             workspace_id: Workspace selector, or None for the server default.

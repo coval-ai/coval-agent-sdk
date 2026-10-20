@@ -9,7 +9,7 @@ class TraceExporter(Protocol):
     """Flush, upload, and discard traces without exposing provider types.
 
     Implementations own their tracing provider and buffers. Flush and upload
-    run in worker threads during session cleanup, after the adapter has closed.
+    run in worker threads during session cleanup, after application cleanup.
     Discard must release local buffers promptly.
     """
 
@@ -35,7 +35,7 @@ class TraceExporter(Protocol):
         """Upload one completed conversation, retaining spans on failure.
 
         Args:
-            simulation_id: Identifier supplied to the agent factory.
+            simulation_id: Identifier from the audio connection.
             api_base_url: Coval API root including the version path.
             api_key: Organization API credential; never log it.
             workspace_id: Workspace selector, or None for the server default.
@@ -53,6 +53,6 @@ class TraceExporter(Protocol):
         """Release a failed conversation's spans after closure and flush.
 
         Args:
-            simulation_id: Identifier supplied to the agent factory.
+            simulation_id: Identifier from the audio connection.
         """
         ...

@@ -22,16 +22,25 @@ scripts/install
 
 See [local development](docs/local-development.md) for building a wheel and installing it into another project. A source install does not publish a package.
 
-## Run an agent
+## Connect an existing agent
 
-Select an existing Coval agent, persona, and test set in your workspace. Set `COVAL_API_KEY`, `COVAL_WORKSPACE_ID`, `COVAL_AGENT_ID`, `COVAL_PERSONA_ID`, and `COVAL_TEST_SET_ID` in your environment. These are credentials and fixture identifiers for the Coval account you intend to test; model-provider credentials belong in your adapter.
+The SDK exposes an audio connection, not an agent class. Plug it into your framework's input and output transports. Your application owns agent construction, conversation state, provider clients, and pipeline cleanup.
+
+Select existing Coval agent, persona, and test-set fixtures in the intended workspace. Configure credentials through your application environment; model-provider credentials stay in your application.
 
 ```python
 import asyncio
 import os
 
 import coval_agent_sdk
-import my_agent
+
+
+async def on_connection(connection: coval_agent_sdk.AudioConnection) -> None:
+    # Minimal audio passthrough to demonstrate the connection contract.
+    # A real integration feeds caller audio into its existing pipeline and
+    # independently sends the pipeline's speech with send_audio().
+    async for audio in connection.receive_audio():
+        await connection.send_audio(audio)
 
 
 async def main() -> coval_agent_sdk.RunResult:
@@ -44,36 +53,46 @@ async def main() -> coval_agent_sdk.RunResult:
         persona_id=os.environ["COVAL_PERSONA_ID"],
         test_set_id=os.environ["COVAL_TEST_SET_ID"],
     )
-    result = await client.run(config, my_agent.create_agent)
-    return result
+    return await client.run(config, on_connection=on_connection)
 
 
 if __name__ == "__main__":
     asyncio.run(main())
 ```
 
-`my_agent` is your adapter module. Its `create_agent(simulation_id)` factory returns a fresh agent for each conversation. Use `await client.connect(simulation_id, my_agent.create_agent)` to attach to an existing simulation. `run()` returns a `RunResult`; `connect()` returns a `SessionResult`. The SDK does not print, log, configure logging, or provide a command-line interface.
+`on_connection` is an async connection handler, not a factory: it receives a ready `AudioConnection` and returns nothing. It wires your application into the audio exchange, remains active until the conversation ends, then stops its tasks and finishes its spans before returning. Different conversations may invoke it concurrently; the application or framework owns isolation of conversation state. The SDK never constructs, subclasses, or closes your agent.
 
-The Coval API SDK is an internal dependency. Applications use this package's client, configuration, results, and errors; API transport clients and generated models are not part of the supported interface.
+`agent_id` selects an existing hosted Coval fixture; it is not a Python object or class. The client defaults to `https://api.coval.dev/v1`; pass `api_base_url` to select another environment. Select the intended workspace explicitly when testing. The Coval API SDK stays private: applications use only this package's client, configuration, audio connection, results, and errors.
 
-The client defaults to `https://api.coval.dev/v1`. Pass `api_base_url` to select another environment, and select the intended workspace explicitly when testing. An API key must be authorized for that workspace. Local installation, imports, and automated tests do not require an API key.
+## Attach to an existing simulation
 
-## Implement an adapter
+`connect()` opens one existing simulation without creating a run. It is an async context manager that yields only after the relay is ready:
 
-Use `StreamingVoiceAgent` when ASR, language-model work, and TTS run in background tasks. Implement these methods:
+```python
+async def attach(
+    client: coval_agent_sdk.CovalVoiceClient, simulation_id: str
+) -> coval_agent_sdk.SessionResult | None:
+    async with client.connect(simulation_id) as connection:
+        await on_connection(connection)
+    return connection.result
+```
 
-| Method | Responsibility |
+The context closes transport and finalizes traces after application code exits. `connection.result` is available after successful exit; leaving before voice completion raises instead of reporting success. `run()` returns a `RunResult` containing these per-conversation outcomes. Neither method provides a CLI, logs, or console output.
+
+## Audio connection
+
+| Member | Contract |
 | --- | --- |
-| `on_ready()` | Start the pipeline once the relay is ready, then return promptly. |
-| `on_audio(audio)` | Enqueue incoming audio without waiting for remote processing. |
-| `audio_output()` | Yield independently produced audio, including greetings and speech during input silence. |
-| `close()` | Cancel and await the adapter's tasks and finish any conversation spans. |
+| `simulation_id` | Correlate application state and traces with this conversation. |
+| `receive_audio()` | Async iterator of caller PCM; ends normally only on successful voice completion. Use one receive loop. |
+| `send_audio(audio)` | Await a paced write. Returns `True` for a complete write, `False` when normal completion interrupts it; failures raise. |
+| `wait_closed()` | Wait for voice completion without consuming input; failures raise. |
+| `closed` | Whether the exchange has ended, including failure. |
+| `result` | Finalized `SessionResult` after successful context exit, otherwise `None`. |
 
-Audio must be PCM16 little-endian, mono, 16 kHz. Bound your input and output queues. Yield even-length `bytes` chunks no larger than 2 MiB; normal 20 ms chunks contain 640 bytes. The SDK paces outgoing audio and closes the agent after success, failure, or cancellation. An output iterator that ends before the session ends is a failure.
+Input and output are independent, so the pipeline may greet the caller before receiving any audio. Audio is PCM16 little-endian, mono, 16 kHz. A normal 20 ms frame contains 640 bytes. The SDK does not resample or implement relay interruption/clear controls. Framework integrations own conversion and interruption policy.
 
-The `VoiceAgent` callback protocol is also available: async `on_ready()` and `on_audio(bytes)` return optional reply bytes, and async `close()` releases resources. Use streaming output when speech must not wait for another input callback. Framework integrations belong in adapters, not in the transport package.
-
-Read [runtime contracts](docs/runtime.md) before implementing an adapter. They cover receive-loop backpressure, pacing, timeouts, cancellation, and supported completion behavior. The SDK does not resample arbitrary audio or implement relay interruption/clear controls.
+Drain incoming audio promptly into a bounded pipeline; unread input is limited to 64 KiB. Await output writes and bound framework queues rather than spawning unlimited send tasks. Chunks must be even-length `bytes`, at most 2 MiB. Output is serialized and paced across adjacent writes. Read [runtime contracts](docs/runtime.md) for readiness, backpressure, deadlines, cancellation, and cleanup.
 
 ## Results and failures
 
@@ -97,7 +116,7 @@ from coval_agent_sdk import tracing
 exporter = tracing.CovalTraceExporter()
 ```
 
-Register it with your pipeline's OpenTelemetry setup, and pass the same exporter to `CovalVoiceClient(trace_exporter=...)`. Use a root span named `conversation` whose `conversation.id` attribute is the simulation ID received by the agent factory. The SDK flushes ended spans and uploads each completed conversation separately.
+Register it with your pipeline's OpenTelemetry setup, and pass the same exporter to `CovalVoiceClient(trace_exporter=...)`. Use a root span named `conversation` whose `conversation.id` attribute is the simulation ID available as `connection.simulation_id`. The SDK flushes ended spans and uploads each completed conversation separately.
 
 Spans may contain prompts, transcripts, and model output. Enable upload only for data you intend to send to Coval. Failed-session traces are discarded after cleanup; a failed upload after a completed voice session is returned in `SessionResult.trace.error` and can be retried through the retained exporter. See [trace lifecycle](docs/runtime.md#trace-lifecycle) for buffer limits and failure semantics.
 

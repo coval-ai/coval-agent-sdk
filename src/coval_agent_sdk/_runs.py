@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable
+from collections.abc import Callable
 import dataclasses
 import time
 from typing import Any
@@ -11,7 +13,7 @@ from urllib import parse
 from coval_agent_sdk import _defaults
 from coval_agent_sdk import _http
 from coval_agent_sdk import _session
-from coval_agent_sdk import agent
+from coval_agent_sdk import audio
 from coval_agent_sdk import config as run_config
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
@@ -84,7 +86,7 @@ class _RunState:
 async def launch_and_run(
     api: _http.CovalApi,
     config: run_config.RunConfig,
-    agent_factory: agent.AgentFactory,
+    on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
     trace_exporter: telemetry.TraceExporter | None = None,
 ) -> results.RunResult:
     """Launch once and retain completed outcomes through run failures."""
@@ -93,7 +95,7 @@ async def launch_and_run(
     try:
         try:
             return await _launch_and_run(
-                api, config, agent_factory, trace_exporter, active, state
+                api, config, on_connection, trace_exporter, active, state
             )
         finally:
             unfinished = [task for task in active.values() if not task.done()]
@@ -128,7 +130,7 @@ def _completed_sessions(
 async def _launch_and_run(
     api: _http.CovalApi,
     config: run_config.RunConfig,
-    agent_factory: agent.AgentFactory,
+    on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
     trace_exporter: telemetry.TraceExporter | None,
     active: dict[str, asyncio.Task[results.SessionResult]],
     state: _RunState,
@@ -156,7 +158,7 @@ async def _launch_and_run(
     run_status = "PENDING"
     while time.monotonic() < deadline:
         await _attach_simulations(
-            api, run_id, deadline, agent_factory, trace_exporter, seen, active
+            api, run_id, deadline, on_connection, trace_exporter, seen, active
         )
         for task in active.values():
             if task.done():
@@ -206,7 +208,7 @@ async def _attach_simulations(
     api: _http.CovalApi,
     run_id: str,
     deadline: float,
-    agent_factory: agent.AgentFactory,
+    on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
     trace_exporter: telemetry.TraceExporter | None,
     seen: set[str],
     active: dict[str, asyncio.Task[results.SessionResult]],
@@ -237,7 +239,7 @@ async def _attach_simulations(
                 continue
             active[simulation_id] = asyncio.create_task(
                 _session.run_session(
-                    api, simulation_id, agent_factory, trace_exporter
+                    api, simulation_id, on_connection, trace_exporter
                 )
             )
         page_token = listing.get("next_page_token")

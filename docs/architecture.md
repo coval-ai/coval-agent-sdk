@@ -1,23 +1,23 @@
 # Architecture
 
-The SDK owns the connection between a local voice agent and a Coval simulation. It owns authentication, connection discovery, audio transport, pacing, run monitoring, and terminal cleanup. The adapter owns its agent framework, provider clients, input/output queues, and background tasks.
+The SDK owns the connection between a local voice agent and a Coval simulation. It owns authentication, connection discovery, audio transport, pacing, run monitoring, and terminal cleanup. The application owns its agent framework, provider clients, state isolation, pipeline queues, and background tasks.
 
 ## Module ownership
 
 | Module | Owns |
 | --- | --- |
 | `src/coval_agent_sdk/__init__.py` | The explicit supported public API and its `__all__`. |
-| `agent.py` | Callback protocol, streaming abstract base class, and per-conversation factory type. |
+| `audio.py` | Public per-conversation audio connection, bounded input, and observable completion. |
 | `results.py` | Immutable run, session, and trace outcomes. |
 | `config.py` | Immutable run configuration and its validation. |
 | `errors.py` | API and relay errors, including partial run outcomes exposed to callers. |
-| `client.py` | Public `run()` and `connect()` orchestration. |
+| `client.py` | Public run handler and connection context entry points. |
 | `telemetry.py` | Dependency-free trace lifecycle protocol used by the client. |
 | `tracing.py` | Optional OpenTelemetry provider flush, buffers, and upload lifecycle. |
 | `_http.py` | Private Coval API SDK adapter, JSON validation, error translation, and request resource cleanup; mutation requests are not retried. |
 | `_connection.py` | Offer discovery and one-use WebSocket connection setup. |
-| `_audio.py` | Outgoing PCM pacing, reply budgets, and streaming producer ownership. |
-| `_session.py` | One agent/socket session, readiness, input acknowledgements, and cleanup. |
+| `_audio.py` | Private connection state shared by the public handle/context, serialized PCM pacing, validation, and byte accounting. |
+| `_session.py` | Connection context, relay reader, readiness, input acknowledgements, handler observation, and trace cleanup. |
 | `_runs.py` | Run launch, paginated conversation discovery, monitoring, and sibling cancellation. |
 | `_defaults.py` | Internal protocol limits and timeout defaults. |
 | `_exceptions.py` | Secondary cleanup diagnostics that preserve primary exception identity. |
@@ -26,7 +26,7 @@ Paths without a directory prefix in this table are relative to `src/coval_agent_
 
 ## Dependency direction
 
-Public client methods call run/session orchestration. Orchestration depends on connection, audio, and HTTP owners. Adapter contracts, configuration, errors, and defaults remain small leaf responsibilities. Core orchestration depends on the dependency-free `TraceExporter` protocol. Only the optional `tracing` module imports OpenTelemetry; it owns provider flushing, buffers, and OTLP protobuf encoding and does not import session orchestration. Import its concrete exporter from `coval_agent_sdk.tracing`, not the root facade. The architecture checker rejects OpenTelemetry imports outside that integration module.
+Public client methods call run/session orchestration. Orchestration depends on connection, audio, and HTTP owners. Configuration, results, errors, and defaults remain small leaf responsibilities. The public audio connection owns its input buffer and write coordination. Core orchestration depends on the dependency-free `TraceExporter` protocol. Only the optional `tracing` module imports OpenTelemetry; it owns provider flushing, buffers, and OTLP protobuf encoding and does not import session orchestration. Import its concrete exporter from `coval_agent_sdk.tracing`, not the root facade. The architecture checker rejects OpenTelemetry imports outside that integration module.
 
 Internal code imports owning modules rather than the root public facade. The root initializer is the only symbol-reexport facade. Do not introduce a cycle or move an import inside a function to hide one. `scripts/check_architecture.py` checks the allowed first-party dependency graph, top-level absolute imports, production dependency roots, and initializer contents.
 
@@ -40,7 +40,7 @@ Tracing sends encoded protobuf through the same private adapter as JSON API requ
 
 ## State and resources
 
-A client holds API configuration and an optional trace exporter. Each `connect()` call or discovered run conversation creates a fresh session and adapter. The session owns its output task, socket context, readiness state, input byte count, and terminal outcome. Outgoing audio owns its bounded callback queue, in-flight byte accounting, and producer iteration.
+A client holds API configuration and an optional trace exporter. Each connection context owns a relay reader and AudioConnection. The connection owns its bounded incoming buffer, readiness/completion events, and audio byte counts. The private PCM writer owns a send lock and cross-call pacing. The SDK never creates or closes an application agent. Application handlers release pipeline resources before the SDK finalizes traces.
 
 Run monitoring records every created task before continuing discovery, so a later-page failure can still cancel and await all active local sessions. It tracks conversations that ended before attachment rather than silently reporting a partial run as complete. Cancelling local tasks does not imply the hosted run was cancelled.
 
@@ -48,7 +48,7 @@ The trace exporter is process-wide but correlates and uploads one conversation a
 
 ## Extension boundaries
 
-Keep provider-specific models, agent frameworks, resampling, and application policy in adapters or consumer projects. Add a core abstraction only when the SDK owns a demonstrated shared contract. A framework integration does not justify making every SDK installation depend on that framework.
+Keep provider-specific models, agent frameworks, resampling, and application policy in framework transports or consumer projects. Add a core abstraction only when the SDK owns a demonstrated shared contract. A framework integration does not justify making every SDK installation depend on that framework.
 
 Treat public exports and entry points as deliberate API choices. This pre-release package has no reason to ship alternate import names for unexposed implementation helpers. Proposed interface changes belong in [API design](developer-api.md) until their behavior and migration implications are settled.
 

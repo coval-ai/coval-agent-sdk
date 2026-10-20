@@ -46,9 +46,10 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 
 ## Runtime
 
-- Keep input callbacks prompt and output queues bounded; preserve PCM16 validation and cross-chunk pacing.
+- Expose audio connections without SDK agent classes or factories; keep application pipeline construction and lifecycle outside the SDK.
+- Bound unread input, await serialized output writes, and preserve PCM16 validation and cross-call pacing.
 - Retry only documented transient reads and unconsumed relay upgrades; do not automatically repeat run creation or a consumed connection attempt.
-- Preserve the primary session error through cancellation, agent closure, and trace cleanup.
+- Preserve the primary session error through cancellation, application cleanup, and trace cleanup.
 - Accept a missing terminal frame only when the simulation API explicitly confirms completion.
 - Upload completed conversations separately and discard failed-session traces after closure and flush.
 - Use synthetic fixtures and deterministic local collaborators for automated tests; live simulations need an explicitly selected environment and existing authorization.

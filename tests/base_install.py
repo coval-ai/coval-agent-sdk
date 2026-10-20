@@ -33,20 +33,6 @@ READY = json.dumps(
 PCM = b"\x01\x00" * 320
 
 
-class Agent:
-    def __init__(self):
-        self.closed = False
-
-    async def on_ready(self):
-        return None
-
-    async def on_audio(self, audio):
-        return audio
-
-    async def close(self):
-        self.closed = True
-
-
 class Socket:
     def __init__(self):
         self.sent = asyncio.Event()
@@ -86,13 +72,11 @@ class BaseInstallationTest(unittest.IsolatedAsyncioTestCase):
 
     async def test_connect_and_run_without_optional_imports_or_output(self):
         client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
-        agents = []
         sockets = []
 
-        def factory(simulation_id):
-            agent = Agent()
-            agents.append(agent)
-            return agent
+        async def handle(connection):
+            async for audio in connection.receive_audio():
+                await connection.send_audio(audio)
 
         async def connect(api, simulation_id):
             socket = Socket()
@@ -123,15 +107,15 @@ class BaseInstallationTest(unittest.IsolatedAsyncioTestCase):
             contextlib.redirect_stderr(errors),
             self.assertNoLogs("coval_agent_sdk", level="DEBUG"),
         ):
-            session = await asyncio.wait_for(
-                client.connect("direct-a", factory), 2
-            )
+            async with client.connect("direct-a") as connection:
+                await asyncio.wait_for(handle(connection), 2)
+            session = connection.result
             run = await asyncio.wait_for(
                 client.run(
                     coval_agent_sdk.RunConfig(
                         "agent-a", "persona-a", "test-set-a"
                     ),
-                    factory,
+                    handle,
                 ),
                 2,
             )
@@ -146,7 +130,6 @@ class BaseInstallationTest(unittest.IsolatedAsyncioTestCase):
                 (coval_agent_sdk.SessionResult("conversation-a", 640, 640),),
             ),
         )
-        self.assertTrue(all(agent.closed for agent in agents))
         self.assertTrue(all(socket.closed for socket in sockets))
         self.assertEqual(output.getvalue(), "")
         self.assertEqual(errors.getvalue(), "")

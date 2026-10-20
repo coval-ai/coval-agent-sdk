@@ -52,7 +52,7 @@ Start with a concise sentence and leave a blank line before additional explanati
 
 ```python
 async def connect(simulation_id: str) -> None:
-    """Attach a fresh agent to an existing simulation.
+    """Open a ready audio connection to an existing simulation.
 
     Args:
         simulation_id: Identifier of the hosted conversation to attach to.

@@ -6,7 +6,7 @@ from coval_agent_sdk import results
 
 
 class CovalError(RuntimeError):
-    """Base for SDK-owned failures; excludes adapter errors and cancellation."""
+    """Base for SDK failures; excludes application errors and cancellation."""
 
 
 class TunnelError(CovalError):

@@ -4,7 +4,7 @@ This document covers maintainer preparation. `scripts/build` creates local artif
 
 ## Before the first public release
 
-- Settle the public API names, factory contract, error behavior, and pre-release version.
+- Settle the public API names, audio connection contract, error behavior, and pre-release version.
 - Review the repository and Git history for credentials, customer material, private links, and copied material requiring attribution.
 - Confirm ownership, `LICENSE`, `NOTICE`, SPDX metadata, and any third-party notices.
 - Confirm a working private vulnerability-reporting channel and update `SECURITY.md` with its actual route.

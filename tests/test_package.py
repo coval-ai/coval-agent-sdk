@@ -9,7 +9,7 @@ from packaging import requirements
 import pytest
 
 import coval_agent_sdk
-from coval_agent_sdk import agent
+from coval_agent_sdk import audio
 from coval_agent_sdk import client
 from coval_agent_sdk import config
 from coval_agent_sdk import errors
@@ -30,9 +30,8 @@ def test_public_facade_exports_the_documented_definitions():
         "SessionResult": results.SessionResult,
         "TraceResult": results.TraceResult,
         "TraceExporter": telemetry.TraceExporter,
-        "StreamingVoiceAgent": agent.StreamingVoiceAgent,
+        "AudioConnection": audio.AudioConnection,
         "TunnelError": errors.TunnelError,
-        "VoiceAgent": agent.VoiceAgent,
     }
     assert set(coval_agent_sdk.__all__) == set(expected)
     for name, definition in expected.items():
@@ -133,3 +132,18 @@ def test_opentelemetry_dependencies_belong_only_to_tracing_extra():
         "opentelemetry-exporter-otlp-proto-common",
     }
     assert "tracing" in package.metadata.get_all("Provides-Extra")
+
+
+def test_sdk_exposes_no_agent_contract_or_factory():
+    package = pathlib.Path(coval_agent_sdk.__file__).parent
+    assert not (package / "agent.py").exists()
+    assert not hasattr(coval_agent_sdk, "VoiceAgent")
+    assert not hasattr(coval_agent_sdk, "StreamingVoiceAgent")
+    import inspect
+
+    assert list(
+        inspect.signature(coval_agent_sdk.CovalVoiceClient.connect).parameters
+    ) == ["self", "simulation_id"]
+    assert list(
+        inspect.signature(coval_agent_sdk.CovalVoiceClient.run).parameters
+    ) == ["self", "config", "on_connection"]

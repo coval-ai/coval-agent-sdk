@@ -2,23 +2,25 @@
 
 These contracts describe the implemented client. They are the boundaries an adapter and any transport refactor must preserve.
 
-## Agent lifecycle
+## Connection lifecycle
 
-The Python client receives a factory taking a simulation ID. Each local conversation constructs one fresh adapter, opens an outbound relay connection, waits for `session_ready`, calls `on_ready()`, and starts output only after that callback completes. Incoming audio is acknowledged before `on_audio()` is awaited.
+`CovalVoiceClient.connect(simulation_id)` yields a ready `AudioConnection` through an async context manager. `run(config, on_connection)` launches a hosted run and invokes an async application handler for each eligible ready connection. The SDK has no agent classes or factories and does not construct or close an application's pipeline. A hosted agent fixture ID remains part of run configuration.
 
-`on_ready()` and `on_audio()` must return promptly. Put slow ASR, model, or TTS work into separately owned tasks and bounded queues. The receive loop cannot read the next frame while a callback is awaiting remote work. Streaming adapters yield output independently; callback adapters may return a greeting or reply directly.
+The SDK receives relay frames in its own task, independently of application processing. Each connection requires one validated `session_ready` before input, output, or normal completion. Applications consume `receive_audio()` and await `send_audio()` independently. `wait_closed()` observes voice completion without consuming input. The application owns state isolation, provider/pipeline tasks and their cleanup; stop them and end conversation spans before leaving the context or returning from the run handler.
 
-The session cancels and awaits its output task before closing the adapter. The adapter's `close()` method must cancel and await its own provider/pipeline tasks and finish conversation spans. All SDK-owned failures derive from `CovalError`. Adapter exceptions and cancellation propagate unchanged after cleanup through both `connect()` and `run()`; only SDK failures receive a `RunError` snapshot after launch. A secondary cleanup error must not hide the primary failure.
+A handler returning or a context exiting before voice completion fails visibly. A failed transport cancels and awaits a run handler so its finally blocks execute. Normal completion wakes receive iterators and pending sends; handlers may then finish their application cleanup. A direct context does not cancel the caller's task: connection reads/writes/wait_closed surface failure, and context exit checks the outcome even if the application ignored it. A handler must observe the connection and remain bounded by application policy or the run deadline.
+
+All SDK-owned failures derive from `CovalError`. Application exceptions and cancellation propagate unchanged after cleanup; only SDK failures receive a `RunError` snapshot after launch. Trace cleanup must not hide the primary error. `connection.result` remains None until the context has successfully finalized; successful local voice transport does not imply hosted evaluation completion.
 
 ## Audio and backpressure
 
-The wire format is PCM16 little-endian, one channel, 16 kHz. A sample contains two bytes; a normal 20 ms frame contains 640 bytes. The SDK validates even-length audio, slices outgoing audio into paced frames, and retains pacing state across independently yielded chunks. It validates callback and streaming output before sending and retains pacing across adjacent replies as well as streamed chunks. It does not resample an arbitrary adapter format.
+The wire format is PCM16 little-endian, one channel, 16 kHz. A sample contains two bytes; a normal 20 ms frame contains 640 bytes. The SDK validates even-length bytes and slices outgoing audio into paced frames, retaining pacing across calls and serializing simultaneous writes. It does not resample arbitrary application formats.
 
-Callback replies are bounded by both a four-reply queue and a 2 MiB budget covering queued and in-flight output. Streaming output must yield `bytes` chunks no larger than 2 MiB. Empty chunks are ignored, malformed output fails the session, and an output iterator that ends before `session_end` fails the session.
+Each send accepts at most 2 MiB and must be awaited; the SDK does not buffer an unbounded stream of output. A send interrupted by normal voice completion returns False, including after a partial write; sent bytes are counted individually and never replayed. A failed connection or malformed output raises. Applications must bound their own queues and tasks. Only one receive iterator may be active per connection.
 
-The relay permits 64 KiB of unacknowledged input, approximately two seconds of this audio format. A callback that blocks reception can accumulate that backlog even though each received frame was acknowledged promptly. A relay overload close with code 1013 remains an error and tells the adapter author to move slow work off the receive loop. The budget is cumulative, not a fresh allowance for every callback.
+Unread input is bounded to 64 KiB across queued chunks. Input is acknowledged after validation and bounded enqueueing; overflowing the local budget fails the session instead of dropping audio or blocking terminal control frames. The hosted relay also limits unacknowledged input to 64 KiB. An overload close remains a failure. Normal completion drains queued input; failures wake receivers immediately rather than appearing as end-of-stream.
 
-The SDK does not implement relay clear/barge-in controls. An adapter must not claim interruption support merely because it consumes and produces audio concurrently.
+The SDK does not implement relay clear/barge-in controls. Concurrent input and output do not establish interruption support.
 
 ## Discovery and connection
 
@@ -42,7 +44,7 @@ A live offer may retry network/timeouts and HTTP 500/502/503/504 handshake failu
 
 `RunConfig.run_timeout_seconds` changes the batch monitoring deadline. This includes queued conversations and evaluation postprocessing. An expired deadline fails visibly and cancels local sessions; it does not cancel the hosted run. The HTTP launch request has its own request timeout and is never automatically repeated.
 
-Monitoring paginates simulations, defers PENDING/IN QUEUE conversations without starting their per-session connection deadline, attaches each eligible conversation once, and observes the run's terminal status. Queued conversations remain covered by the batch deadline and cannot be omitted from a successful result. A failed local session cancels remaining local sessions. A completed batch requires a successful run outcome and no conversations missed before attachment; successful dispatch or one completed voice session does not establish that result.
+Monitoring paginates simulations, defers PENDING/IN QUEUE conversations without starting their per-session connection deadline, attaches each eligible conversation once, and observes the run's terminal status. Queued conversations remain covered by the batch deadline and cannot be omitted from a successful result. A failed local connection or handler cancels and awaits sibling handlers and transports. A completed batch requires a successful run outcome and no conversations missed before attachment; successful dispatch or one completed voice session does not establish that result.
 
 ## Relay closure and authoritative completion
 
@@ -52,14 +54,14 @@ Explicit protocol and overload rejections remain errors even if a later API read
 
 ## Trace lifecycle
 
-Tracing is optional and requires the `[tracing]` extra. Import the concrete exporter from `coval_agent_sdk.tracing`. Share one `CovalTraceExporter` between the pipeline's OpenTelemetry setup and the SDK client, and correlate the conversation root with the simulation ID. The agent must finish its spans before closure returns so session cleanup can ask the exporter to flush and finalize that conversation. The core uses a dependency-free protocol and does not look up an OpenTelemetry provider itself.
+Tracing is optional and requires the `[tracing]` extra. Import the concrete exporter from `coval_agent_sdk.tracing`. Share one `CovalTraceExporter` between the pipeline's OpenTelemetry setup and the SDK client, and correlate the conversation root with the simulation ID. The application must finish its spans before leaving the context or returning from the handler so cleanup can ask the exporter to flush and finalize that conversation. The core uses a dependency-free protocol and does not look up an OpenTelemetry provider itself.
 
 The exporter buffers at most 10,000 ended spans and 10,000 trace metadata entries by default. Tune `max_buffered_spans` and `max_buffered_traces` for the process. Damaged traces retain rejection information so later roots cannot turn an incomplete trace into a successful upload. Uploading spans remain counted against the buffer budget.
 
-Completed conversations are uploaded individually as OTLP protobuf through the private Coval API transport. Each HTTP upload is a single attempt with the normal request timeout; failures return diagnostics without dependency logging or automatic replay. Failed conversations close, flush, and discard their spans. An upload failure after a completed voice session is returned in `SessionResult.trace.error` without rerunning the conversation or cancelling sibling calls; retained spans can be retried explicitly through the exporter. Agent and session failures still propagate.
+Completed conversations are uploaded individually as OTLP protobuf through the private Coval API transport. Each HTTP upload is a single attempt with the normal request timeout; failures return diagnostics without dependency logging or automatic replay. Failed conversations close, flush, and discard their spans. An upload failure after a completed voice session is returned in `SessionResult.trace.error` without rerunning the conversation or cancelling sibling calls; retained spans can be retried explicitly through the exporter. Application and session failures still propagate.
 
 Prompts, transcripts, and model output may appear in spans. Enable export only when that data is intended for Coval, and keep test fixtures synthetic.
 
 ## Returned outcomes
 
-After cleanup, `connect()` returns the simulation ID, local completion status, audio byte counts, and optional trace-delivery outcome. `run()` returns the run ID, hosted completion status, and completed session results. A post-launch SDK run failure raises `RunError` carrying the known run snapshot. Its status is `None` until a monitoring response supplies one. The SDK emits no console output or log records; applications decide how to present results.
+After cleanup, a successful connection context makes its SessionResult available through `connection.result`, including identity, local completion status, audio counts, and trace outcome. `run()` returns the run ID, hosted completion status, and completed session results. A post-launch SDK run failure raises `RunError` carrying the known run snapshot. Its status is `None` until a monitoring response supplies one. The SDK emits no console output or log records; applications decide how to present results.

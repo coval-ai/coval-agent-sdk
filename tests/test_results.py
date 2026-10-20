@@ -1,4 +1,4 @@
-"""Public outcomes and silence with real run/session orchestration."""
+"""Run and connection outcomes, application ownership, and silent failures."""
 
 import asyncio
 import dataclasses
@@ -12,7 +12,6 @@ import coval_agent_sdk
 from coval_agent_sdk import _connection
 from coval_agent_sdk import _defaults
 from coval_agent_sdk import _runs
-from coval_agent_sdk import _session
 from coval_agent_sdk import errors
 
 READY = json.dumps(
@@ -25,107 +24,8 @@ READY = json.dumps(
         },
     }
 )
-INPUT = b"\x01\x00" * 320
+PCM = b"\x01\x00" * 320
 OUTPUT = b"\x02\x00" * 320
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("queued_status", ["PENDING", "IN QUEUE"])
-async def test_run_defers_queued_agents_within_the_batch_deadline(
-    monkeypatch, queued_status
-):
-    clock = [0.0]
-    listing_count = 0
-    created_at = []
-    agent = Agent()
-
-    class ReadySocket(Socket):
-        async def __aiter__(self):
-            yield READY
-            await asyncio.sleep(0)
-            yield '{"type":"session_end"}'
-
-    socket = ReadySocket()
-
-    def factory(simulation_id):
-        assert simulation_id == "conversation-a"
-        created_at.append(clock[0])
-        return agent
-
-    async def read(path, *, query=None):
-        nonlocal listing_count
-        await asyncio.sleep(0)
-        if path == "simulations":
-            listing_count += 1
-            if listing_count == 2:
-                assert created_at == []
-                clock[0] = _defaults.CONNECT_WAIT_SECONDS + 1
-            return {
-                "simulations": [
-                    {
-                        "simulation_id": "conversation-a",
-                        "status": queued_status
-                        if listing_count == 1
-                        else "IN PROGRESS",
-                    }
-                ]
-            }
-        return {
-            "run": {
-                "status": "IN PROGRESS" if listing_count == 1 else "COMPLETED"
-            }
-        }
-
-    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
-    monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
-    monkeypatch.setattr(
-        _runs, "time", types.SimpleNamespace(monotonic=lambda: clock[0])
-    )
-    monkeypatch.setattr(
-        _connection,
-        "open_voice_connection",
-        mock.AsyncMock(return_value=socket),
-    )
-    monkeypatch.setattr(
-        client._api,
-        "post",
-        mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
-    )
-    monkeypatch.setattr(client._api, "get", read)
-    result = await asyncio.wait_for(
-        client.run(
-            coval_agent_sdk.RunConfig(
-                "agent-a",
-                "persona-a",
-                "test-set-a",
-                run_timeout_seconds=_defaults.CONNECT_WAIT_SECONDS * 2,
-            ),
-            factory,
-        ),
-        2,
-    )
-    assert created_at == [_defaults.CONNECT_WAIT_SECONDS + 1]
-    assert result.run_id == "run-a"
-    assert result.conversations == (
-        coval_agent_sdk.SessionResult("conversation-a", 0, 0),
-    )
-    assert agent.closed
-    assert socket.closed
-
-
-class Agent:
-    def __init__(self):
-        self.closed = False
-
-    async def on_ready(self):
-        return None
-
-    async def on_audio(self, audio):
-        assert audio == INPUT
-        return OUTPUT
-
-    async def close(self):
-        self.closed = True
 
 
 class Socket:
@@ -141,7 +41,7 @@ class Socket:
 
     async def __aiter__(self):
         yield READY
-        yield INPUT
+        yield PCM
         await self.sent.wait()
         yield '{"type":"session_end"}'
 
@@ -151,31 +51,27 @@ class Socket:
             self.sent.set()
 
 
-@pytest.mark.asyncio
-@pytest.mark.parametrize("hosted_status", ["COMPLETED", "FAILED"])
-async def test_run_returns_identity_and_sessions_without_output(
-    monkeypatch, capsys, caplog, hosted_status
+async def handle(connection):
+    async for audio in connection.receive_audio():
+        assert audio == PCM
+        await connection.send_audio(OUTPUT)
+
+
+def setup_run(
+    monkeypatch, client, hosted_status="COMPLETED", ids=("conversation-a",)
 ):
-    caplog.set_level("DEBUG")
-    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
     sockets = {}
-    agents = {}
 
     async def connect(api, simulation_id):
         socket = sockets[simulation_id] = Socket()
         return socket
-
-    def factory(simulation_id):
-        agent = agents[simulation_id] = Agent()
-        return agent
 
     async def read(path, *, query=None):
         await asyncio.sleep(0)
         if path == "simulations":
             return {
                 "simulations": [
-                    {"simulation_id": name, "status": "RUNNING"}
-                    for name in ("conversation-a", "conversation-b")
+                    {"simulation_id": name, "status": "RUNNING"} for name in ids
                 ]
             }
         return {"run": {"status": hosted_status}}
@@ -188,14 +84,100 @@ async def test_run_returns_identity_and_sessions_without_output(
     monkeypatch.setattr(client._api, "get", read)
     monkeypatch.setattr(_connection, "open_voice_connection", connect)
     monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
+    return sockets
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("queued_status", ["PENDING", "IN QUEUE"])
+async def test_run_defers_queued_connections_within_batch_deadline(
+    monkeypatch, queued_status
+):
+    clock, calls, connected = [0.0], [0], []
+    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
+    sockets = setup_run(monkeypatch, client)
+    original = _connection.open_voice_connection
+
+    async def connect(api, simulation_id):
+        connected.append(clock[0])
+        return await original(api, simulation_id)
+
+    async def read(path, *, query=None):
+        await asyncio.sleep(0)
+        if path == "simulations":
+            calls[0] += 1
+            if calls[0] == 2:
+                assert connected == []
+                clock[0] = _defaults.CONNECT_WAIT_SECONDS + 1
+            return {
+                "simulations": [
+                    {
+                        "simulation_id": "conversation-a",
+                        "status": queued_status
+                        if calls[0] == 1
+                        else "IN PROGRESS",
+                    }
+                ]
+            }
+        return {
+            "run": {"status": "IN PROGRESS" if calls[0] == 1 else "COMPLETED"}
+        }
+
+    monkeypatch.setattr(_connection, "open_voice_connection", connect)
+    monkeypatch.setattr(client._api, "get", read)
+    monkeypatch.setattr(
+        _runs, "time", types.SimpleNamespace(monotonic=lambda: clock[0])
+    )
+    result = await asyncio.wait_for(
+        client.run(
+            coval_agent_sdk.RunConfig(
+                "agent-a",
+                "persona-a",
+                "test-set-a",
+                run_timeout_seconds=_defaults.CONNECT_WAIT_SECONDS * 2,
+            ),
+            handle,
+        ),
+        2,
+    )
+    assert connected == [_defaults.CONNECT_WAIT_SECONDS + 1]
+    assert result == coval_agent_sdk.RunResult(
+        "run-a",
+        "COMPLETED",
+        (coval_agent_sdk.SessionResult("conversation-a", 640, 640),),
+    )
+    assert sockets["conversation-a"].closed
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("hosted_status", ["COMPLETED", "FAILED"])
+async def test_run_delivers_distinct_connections_and_structured_silent_results(
+    monkeypatch, capsys, caplog, hosted_status
+):
+    caplog.set_level("DEBUG")
+    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
+    sockets = setup_run(
+        monkeypatch, client, hosted_status, ("conversation-a", "conversation-b")
+    )
+    connections = []
+    cleaned = []
+
+    async def application(connection):
+        connections.append(connection)
+        try:
+            await handle(connection)
+        finally:
+            cleaned.append(connection.simulation_id)
+
     operation = client.run(
-        coval_agent_sdk.RunConfig("agent-a", "persona-a", "test-set-a"), factory
+        coval_agent_sdk.RunConfig(
+            "agent-a", "persona-a", "test-set-a", concurrency=2
+        ),
+        on_connection=application,
     )
     if hosted_status == "FAILED":
-        with pytest.raises(coval_agent_sdk.RunError) as failure:
+        with pytest.raises(coval_agent_sdk.RunError) as raised:
             await asyncio.wait_for(operation, 2)
-        result = failure.value.result
-        assert isinstance(failure.value.__cause__, coval_agent_sdk.TunnelError)
+        result = raised.value.result
     else:
         result = await asyncio.wait_for(operation, 2)
     assert result == coval_agent_sdk.RunResult(
@@ -206,7 +188,12 @@ async def test_run_returns_identity_and_sessions_without_output(
             coval_agent_sdk.SessionResult("conversation-b", 640, 640),
         ),
     )
-    assert all(agent.closed for agent in agents.values())
+    assert {c.simulation_id for c in connections} == {
+        "conversation-a",
+        "conversation-b",
+    }
+    assert connections[0] is not connections[1]
+    assert set(cleaned) == set(sockets)
     assert all(socket.closed for socket in sockets.values())
     with pytest.raises(dataclasses.FrozenInstanceError):
         result.run_id = "changed"
@@ -216,337 +203,372 @@ async def test_run_returns_identity_and_sessions_without_output(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("trace_failure", [None, "flush", "upload"])
-async def test_connect_returns_trace_delivery_without_console_warnings(
+async def test_application_cleanup_precedes_final_result_and_trace_delivery(
     monkeypatch, capsys, caplog, trace_failure
 ):
     caplog.set_level("DEBUG")
-    socket = Socket()
-    agent = Agent()
+    client = coval_agent_sdk.CovalVoiceClient(
+        api_key="synthetic-key", workspace_id="workspace-a"
+    )
+    sockets = setup_run(monkeypatch, client)
+    order = []
     exporter = mock.Mock()
+
+    def flush(**kwargs):
+        assert order == ["application-cleaned"]
+        assert sockets["conversation-a"].closed
+        order.append("flush")
+        return trace_failure != "flush"
+
+    exporter.flush.side_effect = flush
     exporter.upload.return_value = 7
     if trace_failure == "upload":
         exporter.upload.side_effect = errors.CovalTraceError("upload rejected")
-    exporter.flush.return_value = trace_failure != "flush"
-    monkeypatch.setattr(
-        _connection,
-        "open_voice_connection",
-        mock.AsyncMock(return_value=socket),
-    )
-    client = coval_agent_sdk.CovalVoiceClient(
-        api_key="synthetic-key", trace_exporter=exporter
-    )
-    result = await asyncio.wait_for(
-        client.connect("conversation-a", lambda _: agent), 2
-    )
+    client.trace_exporter = exporter
+    async with client.connect("conversation-a") as connection:
+        await handle(connection)
+        assert connection.result is None
+        order.append("application-cleaned")
+    result = connection.result
     assert result.simulation_id == "conversation-a"
-    assert result.status == "COMPLETED"
     assert (result.received_audio_bytes, result.sent_audio_bytes) == (640, 640)
     if trace_failure:
         assert result.trace.uploaded_spans is None
-        assert result.trace.error
         assert (
             "flush" if trace_failure == "flush" else "upload rejected"
         ) in result.trace.error
     else:
         assert result.trace == coval_agent_sdk.TraceResult(uploaded_spans=7)
+    if trace_failure != "flush":
+        exporter.upload.assert_called_once_with(
+            simulation_id="conversation-a",
+            api_base_url="https://api.coval.dev/v1",
+            api_key="synthetic-key",
+            workspace_id="workspace-a",
+        )
     exporter.discard.assert_not_called()
-    assert agent.closed
-    assert socket.closed
     assert capsys.readouterr() == ("", "")
     assert caplog.records == []
 
 
 @pytest.mark.asyncio
-async def test_launch_failure_keeps_original_error_and_stays_silent(capsys):
+@pytest.mark.parametrize("after_launch", [False, True])
+async def test_sdk_failure_keeps_launch_identity_and_last_observed_status(
+    monkeypatch, after_launch
+):
     client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
     original = coval_agent_sdk.CovalHttpError(status_code=403, message="denied")
-    with (
-        mock.patch.object(
-            client._api, "post", mock.AsyncMock(side_effect=original)
-        ),
-        pytest.raises(coval_agent_sdk.CovalError) as failure,
-    ):
-        await client.run(
-            coval_agent_sdk.RunConfig("agent-a", "persona-a", "test-set-a"),
-            lambda _: Agent(),
-        )
-    assert failure.value is original
-    assert capsys.readouterr() == ("", "")
-
-
-@pytest.mark.asyncio
-async def test_post_launch_failure_retains_id_without_inventing_status(capsys):
-    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
-    failure = coval_agent_sdk.CovalHttpError(status_code=403, message="denied")
-    with (
-        mock.patch.object(
-            client._api,
-            "post",
-            mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
-        ),
-        mock.patch.object(
-            client._api, "get", mock.AsyncMock(side_effect=failure)
-        ),
-        pytest.raises(coval_agent_sdk.CovalError) as raised,
-    ):
-        await client.run(
-            coval_agent_sdk.RunConfig("agent-a", "persona-a", "test-set-a"),
-            lambda _: Agent(),
-        )
-    assert isinstance(raised.value, coval_agent_sdk.RunError)
-    assert raised.value.result == coval_agent_sdk.RunResult("run-a", None, ())
-    assert raised.value.__cause__ is failure
-    assert capsys.readouterr() == ("", "")
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    ("entry", "hosted_status"),
-    [("connect", None), ("run", "RUNNING"), ("run", "COMPLETED")],
-)
-@pytest.mark.parametrize(
-    "phase", ["factory", "ready", "audio", "output", "close"]
-)
-async def test_adapter_failures_keep_identity_after_cleanup(
-    monkeypatch, entry, hosted_status, phase
-):
-    original = RuntimeError(f"adapter {phase} failed")
-    failed = asyncio.Event()
-    session_tasks = []
-    socket = Socket()
-
-    def fail():
-        failed.set()
-        raise original
-
-    class FailingAgent(Agent):
-        async def on_ready(self):
-            if phase == "ready":
-                fail()
-
-        async def on_audio(self, audio):
-            if phase == "audio":
-                fail()
-            return await super().on_audio(audio)
-
-        async def close(self):
-            await super().close()
-            if phase == "close":
-                fail()
-
-    class FailingStream(coval_agent_sdk.StreamingVoiceAgent):
-        def __init__(self):
-            self.closed = False
-
-        async def on_audio(self, audio):
-            pass
-
-        async def audio_output(self):
-            yield b""
-            fail()
-
-        async def close(self):
-            self.closed = True
-
-    agent = FailingStream() if phase == "output" else FailingAgent()
-
-    def factory(simulation_id):
-        session_tasks.append(asyncio.current_task())
-        assert simulation_id == "conversation-a"
-        if phase == "factory":
-            fail()
-        return agent
-
-    async def read(path, *, query=None):
-        if path == "simulations":
-            return {
-                "simulations": [
-                    {"simulation_id": "conversation-a", "status": "RUNNING"}
-                ]
-            }
-        # Complete the task during this monitoring read. RUNNING exercises
-        # polling; COMPLETED exercises the final task drain after the read.
-        await failed.wait()
-        await asyncio.wait(session_tasks)
-        return {"run": {"status": hosted_status}}
-
-    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
-    monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
-    monkeypatch.setattr(
-        _connection,
-        "open_voice_connection",
-        mock.AsyncMock(return_value=socket),
-    )
     monkeypatch.setattr(
         client._api,
         "post",
-        mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
+        mock.AsyncMock(
+            return_value={"run": {"run_id": "run-a"}},
+            side_effect=None if after_launch else original,
+        ),
     )
-    monkeypatch.setattr(client._api, "get", read)
+    monkeypatch.setattr(
+        client._api, "get", mock.AsyncMock(side_effect=original)
+    )
+    with pytest.raises(coval_agent_sdk.CovalError) as raised:
+        await client.run(
+            coval_agent_sdk.RunConfig("agent-a", "persona-a", "test-set-a"),
+            handle,
+        )
+    if after_launch:
+        assert isinstance(raised.value, coval_agent_sdk.RunError)
+        assert raised.value.result == coval_agent_sdk.RunResult(
+            "run-a", None, ()
+        )
+        assert raised.value.__cause__ is original
+    else:
+        assert raised.value is original
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("entry", "status"),
+    [("connect", "RUNNING"), ("run", "RUNNING"), ("run", "COMPLETED")],
+)
+@pytest.mark.parametrize("phase", ["start", "input", "output", "cleanup"])
+async def test_application_errors_keep_identity_and_cleanup_owned_resources(
+    monkeypatch, entry, status, phase
+):
+    original = RuntimeError(f"application {phase} failed")
+    client = coval_agent_sdk.CovalVoiceClient(
+        api_key="synthetic-key", trace_exporter=mock.Mock()
+    )
+    client.trace_exporter.flush.return_value = True
+    client.trace_exporter.discard.side_effect = RuntimeError(
+        "secondary discard failure"
+    )
+    sockets = setup_run(monkeypatch, client, status)
+    cleaned = []
+
+    async def application(connection):
+        try:
+            if phase == "start":
+                raise original
+            async for _ in connection.receive_audio():
+                if phase in {"input", "output"}:
+                    raise original
+                await connection.send_audio(OUTPUT)
+        finally:
+            cleaned.append(connection.simulation_id)
+            if phase == "cleanup":
+                raise original
+
+    async def direct():
+        async with client.connect("conversation-a") as connection:
+            await application(connection)
+
     operation = (
-        client.connect("conversation-a", factory)
+        direct()
         if entry == "connect"
         else client.run(
             coval_agent_sdk.RunConfig("agent-a", "persona-a", "test-set-a"),
-            factory,
+            application,
         )
     )
-    with pytest.raises(RuntimeError) as failure:
+    with pytest.raises(RuntimeError) as raised:
         await asyncio.wait_for(operation, 2)
-    assert failure.value is original
-    assert not isinstance(failure.value, coval_agent_sdk.CovalError)
-    assert agent.closed == (phase != "factory")
-    assert socket.closed == (phase != "factory")
-
-
-async def _native_cancellation(original):
-    """Use native task behavior; older Python recreates cancellation errors."""
-
-    async def fail():
-        raise original
-
-    with pytest.raises(asyncio.CancelledError) as caught:
-        await asyncio.wait_for(fail(), 2)
-    return caught.value
+    assert raised.value is original
+    assert not isinstance(raised.value, coval_agent_sdk.CovalError)
+    assert cleaned == ["conversation-a"]
+    assert sockets["conversation-a"].closed
+    client.trace_exporter.upload.assert_not_called()
+    client.trace_exporter.discard.assert_called_once_with(
+        simulation_id="conversation-a"
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("entry", ["connect", "run"])
-async def test_cancellation_propagates_after_cleanup_despite_discard_failure(
-    monkeypatch, entry
-):
-    started = asyncio.Event()
-
-    class WaitingAgent(Agent):
-        async def on_ready(self):
-            started.set()
-            await asyncio.Event().wait()
-
-    agent = WaitingAgent()
-    socket = Socket()
-    exporter = mock.Mock()
-    exporter.flush.return_value = True
-    exporter.discard.side_effect = RuntimeError("discard failed")
+async def test_cancellation_awaits_application_cleanup(monkeypatch, entry):
+    started, cleaned = asyncio.Event(), asyncio.Event()
     client = coval_agent_sdk.CovalVoiceClient(
-        api_key="synthetic-key", trace_exporter=exporter
+        api_key="synthetic-key", trace_exporter=mock.Mock()
     )
+    client.trace_exporter.flush.return_value = True
+    client.trace_exporter.discard.side_effect = RuntimeError("discard failed")
+    sockets = setup_run(monkeypatch, client, "RUNNING")
 
-    async def read(path, *, query=None):
-        if path == "simulations":
-            return {
-                "simulations": [
-                    {"simulation_id": "conversation-a", "status": "RUNNING"}
-                ]
-            }
-        await asyncio.Event().wait()
-        return None
+    async def application(connection):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            await asyncio.sleep(0)
+            cleaned.set()
 
-    monkeypatch.setattr(
-        _connection,
-        "open_voice_connection",
-        mock.AsyncMock(return_value=socket),
-    )
-    monkeypatch.setattr(
-        client._api,
-        "post",
-        mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
-    )
-    monkeypatch.setattr(client._api, "get", read)
+    async def direct():
+        async with client.connect("conversation-a") as connection:
+            await application(connection)
+
     operation = (
-        client.connect("conversation-a", lambda _: agent)
+        direct()
         if entry == "connect"
         else client.run(
             coval_agent_sdk.RunConfig("agent-a", "persona-a", "test-set-a"),
-            lambda _: agent,
+            application,
         )
     )
     task = asyncio.create_task(operation)
-    try:
-        await asyncio.wait_for(started.wait(), 2)
-        task.cancel("stop requested")
-        with pytest.raises(asyncio.CancelledError) as failure:
-            await asyncio.wait_for(task, 2)
-        control = await _native_cancellation(
-            asyncio.CancelledError("stop requested")
-        )
-        assert failure.value.args == control.args
-        assert not isinstance(failure.value, coval_agent_sdk.CovalError)
-        assert agent.closed
-        assert socket.closed
-        exporter.discard.assert_called_once_with(simulation_id="conversation-a")
-    finally:
-        task.cancel()
-        await asyncio.gather(task, return_exceptions=True)
+    await asyncio.wait_for(started.wait(), 2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert cleaned.is_set()
+    assert sockets["conversation-a"].closed
+    client.trace_exporter.upload.assert_not_called()
+    client.trace_exporter.discard.assert_called_once_with(
+        simulation_id="conversation-a"
+    )
 
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "original",
-    [
-        RuntimeError("adapter failed"),
-        asyncio.CancelledError("adapter stopped"),
-        coval_agent_sdk.CovalTraceError("trace failed"),
-    ],
+    "failure_kind", ["application", "sdk", "cancellation", "relay"]
 )
-async def test_failed_adapter_cancels_and_awaits_sibling_sessions(
-    monkeypatch, original
+async def test_failure_cancels_and_awaits_real_sibling_handlers(
+    monkeypatch, failure_kind
 ):
-    sibling_started = asyncio.Event()
-    sibling_closed = asyncio.Event()
+    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
+    sockets = setup_run(monkeypatch, client, "RUNNING", ("broken", "waiting"))
+    sibling_started, sibling_cleaned = asyncio.Event(), asyncio.Event()
+    broken_cleaned = asyncio.Event()
+    if failure_kind == "relay":
 
-    async def session(api, simulation_id, agent_factory, trace_exporter):
-        if simulation_id == "broken":
+        class BrokenSocket(Socket):
+            async def __aiter__(self):
+                yield READY
+                await sibling_started.wait()
+                yield '{"type":"error","message":"synthetic relay failure"}'
+
+        async def connect(api, simulation_id):
+            sockets[simulation_id] = (
+                BrokenSocket() if simulation_id == "broken" else Socket()
+            )
+            return sockets[simulation_id]
+
+        monkeypatch.setattr(_connection, "open_voice_connection", connect)
+    original = (
+        coval_agent_sdk.TunnelError("SDK failed")
+        if failure_kind == "sdk"
+        else asyncio.CancelledError("stopped")
+        if failure_kind == "cancellation"
+        else RuntimeError("application failed")
+    )
+
+    async def application(connection):
+        if connection.simulation_id == "broken":
             await sibling_started.wait()
+            if failure_kind == "relay":
+                try:
+                    await asyncio.Event().wait()
+                finally:
+                    broken_cleaned.set()
             raise original
         sibling_started.set()
         try:
             await asyncio.Event().wait()
         finally:
-            sibling_closed.set()
+            await asyncio.sleep(0)
+            sibling_cleaned.set()
 
-    async def read(path, *, query=None):
-        await asyncio.sleep(0)
-        if path == "simulations":
-            return {
-                "simulations": [
-                    {"simulation_id": name, "status": "RUNNING"}
-                    for name in ("broken", "waiting")
-                ]
-            }
-        return {"run": {"status": "RUNNING"}}
-
-    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
-    monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
-    monkeypatch.setattr(_session, "run_session", session)
-    monkeypatch.setattr(
-        client._api,
-        "post",
-        mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
-    )
-    monkeypatch.setattr(client._api, "get", read)
     expected = (
         coval_agent_sdk.RunError
-        if isinstance(original, coval_agent_sdk.CovalError)
+        if failure_kind in {"sdk", "relay"}
         else type(original)
     )
-    with pytest.raises(expected) as failure:
+    with pytest.raises(expected) as raised:
         await asyncio.wait_for(
             client.run(
                 coval_agent_sdk.RunConfig("agent-a", "persona-a", "test-set-a"),
-                lambda _: Agent(),
+                application,
             ),
             2,
         )
-    if isinstance(original, coval_agent_sdk.CovalError):
-        assert failure.value.__cause__ is original
-        assert failure.value.result == coval_agent_sdk.RunResult(
-            "run-a", "RUNNING", ()
+    if failure_kind == "application":
+        assert raised.value is original
+    if failure_kind == "sdk":
+        assert raised.value.__cause__ is original
+    assert sibling_cleaned.is_set()
+    if failure_kind == "relay":
+        assert broken_cleaned.is_set()
+    assert all(socket.closed for socket in sockets.values())
+
+
+@pytest.mark.asyncio
+async def test_early_handler_return_fails_without_claiming_completed_session(
+    monkeypatch,
+):
+    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
+    sockets = setup_run(monkeypatch, client)
+
+    async def early(connection):
+        return None
+
+    with pytest.raises(
+        coval_agent_sdk.RunError, match="before the conversation completed"
+    ) as raised:
+        await asyncio.wait_for(
+            client.run(
+                coval_agent_sdk.RunConfig("agent-a", "persona-a", "test-set-a"),
+                early,
+            ),
+            2,
         )
-    elif isinstance(original, asyncio.CancelledError):
-        control_original = asyncio.CancelledError(*original.args)
-        control = await _native_cancellation(control_original)
-        assert failure.value.args == control.args
-        assert (failure.value is original) == (control is control_original)
-    else:
-        assert failure.value is original
-    assert sibling_closed.is_set()
+    assert raised.value.result.conversations == ()
+    assert sockets["conversation-a"].closed
+
+
+@pytest.mark.asyncio
+async def test_later_page_failure_cleans_existing_handler(
+    monkeypatch,
+):
+    client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
+    sockets = setup_run(monkeypatch, client, "RUNNING")
+    started, cleaned = asyncio.Event(), asyncio.Event()
+    query_seen = []
+
+    async def read(path, *, query=None):
+        query_seen.append(query)
+        assert path == "simulations"
+        if "page_token" not in query:
+            return {
+                "simulations": [
+                    {"simulation_id": "conversation-a", "status": "RUNNING"}
+                ],
+                "next_page_token": "next-page",
+            }
+        await started.wait()
+        raise coval_agent_sdk.CovalHttpError(
+            status_code=403, message="page rejected"
+        )
+
+    async def application(connection):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cleaned.set()
+
+    monkeypatch.setattr(client._api, "get", read)
+    with pytest.raises(coval_agent_sdk.RunError) as raised:
+        await asyncio.wait_for(
+            client.run(
+                coval_agent_sdk.RunConfig("agent-a", "persona-a", "test-set-a"),
+                application,
+            ),
+            2,
+        )
+    assert raised.value.result.run_id == "run-a"
+    assert cleaned.is_set()
+    assert sockets["conversation-a"].closed
+    assert query_seen == [
+        {"filter": 'run_id="run-a"', "page_size": "100"},
+        {
+            "filter": 'run_id="run-a"',
+            "page_size": "100",
+            "page_token": "next-page",
+        },
+    ]
+
+
+@pytest.mark.asyncio
+async def test_real_conversation_span_ends_before_optional_upload(monkeypatch):
+    from opentelemetry.sdk import trace as sdk_trace
+    from opentelemetry.sdk.trace import export as trace_export
+
+    from coval_agent_sdk import tracing
+
+    exporter = tracing.CovalTraceExporter()
+    provider = sdk_trace.TracerProvider()
+    provider.add_span_processor(trace_export.SimpleSpanProcessor(exporter))
+    monkeypatch.setattr(tracing.trace, "get_tracer_provider", lambda: provider)
+    upload = mock.Mock()
+    monkeypatch.setattr(tracing, "_upload_spans", upload)
+    client = coval_agent_sdk.CovalVoiceClient(
+        api_key="synthetic", trace_exporter=exporter
+    )
+    setup_run(monkeypatch, client)
+    try:
+        async with client.connect("conversation-a") as connection:
+            span = provider.get_tracer(__name__).start_span(
+                "conversation",
+                attributes={"conversation.id": connection.simulation_id},
+            )
+            try:
+                await handle(connection)
+                upload.assert_not_called()
+            finally:
+                span.end()
+        assert connection.result.trace == coval_agent_sdk.TraceResult(
+            uploaded_spans=1
+        )
+        delivered = upload.call_args.args[0]
+        assert [s.name for s in delivered] == ["conversation"]
+        assert delivered[0].attributes["conversation.id"] == "conversation-a"
+        assert delivered[0].end_time is not None
+    finally:
+        provider.shutdown()
