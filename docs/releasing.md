@@ -17,7 +17,7 @@ Release Automation checks out current `main`, computes the next version, regener
 
 The tag starts [Publish](../.github/workflows/publish.yml). It requires an App-created tag on a generated release commit in `main` history, a matching package version, and a generated changelog entry. It runs `scripts/check`, builds distributions, verifies the release wheel in a clean base environment, and passes the artifacts to an isolated `pypi` job for upload with provenance attestations.
 
-A releasable merge can therefore publish to PyPI automatically. Obtain the required release authorization before merging it; GitHub environment approval applies when configured. `scripts/build` creates local artifacts only. A private GitHub repository can publish publicly downloadable packages, so repository visibility is a separate decision.
+A releasable merge can publish to PyPI automatically; GitHub environment approval applies when configured. `scripts/build` creates local artifacts only. Package publication and repository visibility are separate settings.
 
 ## Updating the PyPI description
 

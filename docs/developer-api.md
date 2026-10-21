@@ -1,10 +1,10 @@
 # Developer API
 
-The public boundary is a conversation audio connection. Applications and frameworks retain their own agent classes, construction, configuration, state, tasks, and provider resources. Integrate through `AudioConnection` while keeping pipeline construction and cleanup in your application.
+Integrate an existing voice pipeline through `AudioConnection`. Your application owns pipeline construction, conversation state, provider resources, and cleanup.
 
 ## Developer journey
 
-Install the SDK, select an environment/workspace and existing Coval fixtures, then call `await client.run(config, on_connection=handle_connection)`. The async handler receives one ready `AudioConnection`, connects it to the application's pipeline, stays active through voice completion, and releases application resources before returning. It returns no agent object. Multiple handlers may run concurrently, each with its own simulation ID and audio connection; applications own their framework's state isolation.
+Install the SDK, select an environment/workspace and existing Coval fixtures, then call `await client.run(config, on_connection=handle_connection)`. The async handler receives one ready `AudioConnection`, connects it to the application's pipeline, stays active through voice completion, and releases application resources before returning. Handlers may run concurrently, each with its own simulation ID and audio connection; isolate their state in your application.
 
 For an existing simulation, use `async with client.connect(simulation_id) as connection`. The same pipeline integration works inside this context. Read `connection.result` after successful context exit. No run is created. Early normal exit is a failure, and context cleanup does not imply hosted cancellation.
 
@@ -24,7 +24,7 @@ After launch, SDK run failures raise `RunError` with a partial result and last o
 
 ## Distribution and optional integrations
 
-Install the published `coval-agent-sdk` distribution from PyPI and import `coval_agent_sdk`. The package is classified as alpha; review the changelog and pin the version when reproducibility is required. OpenTelemetry is available only through `[tracing]`, with its concrete exporter in `coval_agent_sdk.tracing`. Maintainers follow [releasing](releasing.md) for versioning and publication.
+Install `coval-agent-sdk` from PyPI and import `coval_agent_sdk`. Install `coval-agent-sdk[tracing]` for the OpenTelemetry exporter in `coval_agent_sdk.tracing`. See the changelog before upgrading and [releasing](releasing.md) for maintainer workflow.
 
 ## Argument validation
 
