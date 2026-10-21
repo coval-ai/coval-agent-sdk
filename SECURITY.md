@@ -4,16 +4,14 @@
 
 Do not open a public issue with credentials, exploitable details, customer data, audio, or transcripts. If the repository's Security tab offers **Report a vulnerability**, use that private reporting channel.
 
-If private GitHub reporting is unavailable, use the contact details published on [Coval's website](https://www.coval.ai/) to request a private security reporting channel. Start with a request to coordinate privately, and share sensitive reproduction details only after a maintainer confirms the channel. This avoids relying on an unverified security mailbox or exposing a report in a public issue.
+If private GitHub reporting is unavailable, contact [Coval support](mailto:support@coval.dev) to request a private security reporting channel. Start with a request to coordinate privately, and share sensitive reproduction details only after a maintainer confirms the channel.
 
 Include the SDK version or commit, Python version, affected entry point, impact, and a minimal synthetic reproduction. Explain whether the issue affects credentials, connection tokens, workspace isolation, unbounded resources, or conversation data. Do not include live API keys or other people's recordings.
 
 ## Supported versions
 
-The SDK is in pre-release development. Reports against the current development version and any announced pre-release are welcome; security fixes and version support are assessed by maintainers. No response-time or bounty commitment is made by this document.
+Reports against the latest published release and the current development version are welcome. The SDK is classified as alpha; security fixes and backports are assessed by maintainers. No response-time or bounty commitment is made by this document.
 
 ## Handling data
 
 Keep credentials in the environment or an approved secret source. One-use relay offers are credentials. OpenTelemetry spans can contain prompts, transcripts, and model output, so trace export is an explicit application choice. Use synthetic fixtures for tests and sanitize diagnostics before sharing them.
-
-Maintainers must confirm a working private reporting channel before making the repository public; see [release preparation](docs/releasing.md).

@@ -64,7 +64,7 @@ The public wire tests use loopback HTTP and TLS WebSocket servers. They require 
 
 ## API and dependencies
 
-Add public exports deliberately and document their ownership, inputs, outputs, error behavior, and cleanup obligations. Keep the importable package independent of any particular agent framework. Put unimplemented interfaces in [API design](docs/developer-api.md), clearly marked as proposals.
+Add public exports deliberately and document their ownership, inputs, outputs, error behavior, and cleanup obligations. Keep the importable package independent of any particular agent framework. Describe unimplemented interfaces in an issue, clearly marked as proposals; keep [Developer API](docs/developer-api.md) aligned with supported behavior.
 
 Expose conversation audio connections without agent classes or factories. Applications own agent/pipeline construction and cleanup; SDK connection contexts and async run handlers own only audio transport and simulation orchestration. Framework plugins belong in consumers, and application cleanup must finish before trace finalization.
 
@@ -82,10 +82,12 @@ Release automation owns the version in `pyproject.toml` and [CHANGELOG.md](CHANG
 
 ## Where prose lives
 
-- `README.md` introduces the SDK, installation, and a complete first-run example.
+- `README.md` introduces the SDK, installation, and a complete connection-check example.
+- The [Coval Docs guide](https://docs.coval.ai/sdks/agent-sdk) owns the end-user integration walkthrough; repository docs own contributor and implementation details.
 - `AGENTS.md` contains concise coding-agent instructions and links to their explanations.
 - `AGENTS.meta.md` governs changes to the agent instructions.
 - `CONTRIBUTING.md` describes the human contribution and review workflow.
+- `docs/developer-api.md` describes the supported public interface and argument validation.
 - `docs/python-style.md` defines imports, initializers, types, docstrings, and formatting.
 - `docs/architecture.md` maps responsibilities and dependency direction.
 - `docs/runtime.md` explains audio, connection, timeout, cancellation, and trace contracts.
@@ -98,6 +100,8 @@ Keep explanations in their owning document and link to them elsewhere. Use one p
 ## Documentation and comments
 
 Document the current behavior and the decisions a developer needs to use or change it. The ownership map above determines where an explanation belongs; keep a single authoritative explanation and link to it from other pages.
+
+Distinguish SDK requirements from example choices. Describe an example's filenames, configuration sources, and helper functions as choices, not integration requirements.
 
 ### Write a comment when
 

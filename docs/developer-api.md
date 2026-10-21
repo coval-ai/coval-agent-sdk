@@ -1,10 +1,10 @@
-# Developer API and Ergonomics
+# Developer API
 
-The public boundary is a conversation audio connection. Applications and frameworks retain their own agent classes, construction, configuration, state, tasks, and provider resources. The SDK supplies no agent base class, protocol, factory, compatibility alias, or executable entry point.
+Integrate an existing voice pipeline through `AudioConnection`. Your application owns pipeline construction, conversation state, provider resources, and cleanup.
 
 ## Developer journey
 
-Install the SDK, select an environment/workspace and existing Coval fixtures, then call `await client.run(config, on_connection=handle_connection)`. The async handler receives one ready `AudioConnection`, connects it to the application's pipeline, stays active through voice completion, and releases application resources before returning. It returns no agent object. Multiple handlers may run concurrently, each with its own simulation ID and audio connection; applications own their framework's state isolation.
+Install the SDK, select an environment/workspace and existing Coval fixtures, then call `await client.run(config, on_connection=handle_connection)`. The async handler receives one ready `AudioConnection`, connects it to the application's pipeline, stays active through voice completion, and releases application resources before returning. Handlers may run concurrently, each with its own simulation ID and audio connection; isolate their state in your application.
 
 For an existing simulation, use `async with client.connect(simulation_id) as connection`. The same pipeline integration works inside this context. Read `connection.result` after successful context exit. No run is created. Early normal exit is a failure, and context cleanup does not imply hosted cancellation.
 
@@ -12,7 +12,7 @@ For an existing simulation, use `async with client.connect(simulation_id) as con
 
 `AudioConnection` exposes `simulation_id`, `receive_audio()`, `send_audio(bytes)`, `wait_closed()`, `closed`, and `result`. Receive and send are independent. There is one active receive iterator; sends are serialized, paced, validated, and awaited. Input is bounded by bytes. The format is fixed PCM16 little-endian mono 16 kHz. See [runtime contracts](runtime.md) for exact completion, buffering, partial-write and failure semantics.
 
-Framework plugins use this connection as an input/output transport. They may live in consumer projects; the core never imports their dependencies. The Playground Pipecat transport demonstrates this boundary without inheriting any SDK agent class.
+Framework plugins use this connection as an input/output transport. They may live in consumer projects; the core never imports their dependencies. For the integration workflow, see the [Agent SDK guide](https://docs.coval.ai/sdks/agent-sdk).
 
 ## Results and failures
 
@@ -24,7 +24,7 @@ After launch, SDK run failures raise `RunError` with a partial result and last o
 
 ## Distribution and optional integrations
 
-The distribution is `coval-agent-sdk`, the Python namespace is `coval_agent_sdk`, and the package is unreleased. Update consumers alongside intentional API changes without aliases or deprecation paths. OpenTelemetry is available only through `[tracing]`, with its concrete exporter in `coval_agent_sdk.tracing`. Publishing and visibility changes follow [release preparation](releasing.md) and require separate authorization.
+Install `coval-agent-sdk` from PyPI and import `coval_agent_sdk`. Install `coval-agent-sdk[tracing]` for the OpenTelemetry exporter in `coval_agent_sdk.tracing`. See the changelog before upgrading and [releasing](releasing.md) for maintainer workflow.
 
 ## Argument validation
 
