@@ -63,6 +63,10 @@ if __name__ == "__main__":
 
 `agent_id` selects the hosted Coval agent configuration. The client uses the production API at `https://api.coval.dev/v1` by default; pass `api_base_url` to select another API root. `run_timeout_seconds` includes queueing and evaluation processing. A local timeout or cancellation stops local work but does not cancel the hosted run.
 
+## Manage test configuration as code
+
+Use the [Coval Terraform provider](https://docs.coval.ai/sdks/terraform-provider) to manage supported fixtures and pass their IDs to the SDK. Terraform owns the persistent configuration, your application runs the voice pipeline, and the Coval platform provides visual review of recordings, evaluations, and traces. The guide documents the current requirement for an existing SDK WebSocket agent.
+
 ## Attach to an existing simulation
 
 `connect()` opens one existing simulation without creating a run. It is an async context manager that yields only after the relay is ready:
