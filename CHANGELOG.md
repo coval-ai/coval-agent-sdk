@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.1.1 (2026-10-21)
+
+### Bug Fixes
+
+- **docs**: Prepare sdk documentation for public readers
+  ([#4](https://github.com/coval-ai/coval-agent-sdk/pull/4),
+  [`e27f11e`](https://github.com/coval-ai/coval-agent-sdk/commit/e27f11e57050e1964dfc3eb5b506bd6fe1f1f6e6))
+
+
 ## v0.1.0 (2026-10-20)
 
 ### Chores
