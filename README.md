@@ -14,9 +14,9 @@ Import the package as `coval_agent_sdk`. See the [Agent SDK guide](https://docs.
 
 ## Run a conversation
 
-Select an SDK WebSocket agent, voice persona, and test set in the same Coval workspace. Set `COVAL_API_KEY`, `COVAL_WORKSPACE_ID`, `COVAL_AGENT_ID`, `COVAL_PERSONA_ID`, and `COVAL_TEST_SET_ID` in your environment. Start with a test set containing one case.
+A run uses an SDK WebSocket agent, voice persona, and test set from the same workspace. Pass credentials and resource IDs to the client and `RunConfig`; this example reads them from environment variables.
 
-This example echoes the caller's audio to check the connection. Replace the handler with your voice pipeline to test agent behavior.
+The handler below echoes the caller's audio to check the connection. In an agent integration, the handler connects the audio stream to your voice pipeline.
 
 ```python
 import asyncio
@@ -51,7 +51,7 @@ if __name__ == "__main__":
     print(result.run_id, result.status)
 ```
 
-`on_connection` receives a ready `AudioConnection`. Feed `receive_audio()` into your pipeline and independently send its speech with `send_audio()`. Keep the handler active until the conversation ends, then release application resources before returning. Handlers may run concurrently; keep conversation state separate.
+`on_connection` receives a ready `AudioConnection`. Feed `receive_audio()` into your pipeline and independently send its speech with `send_audio()`. Keep the handler active until the conversation ends, then finish conversation tasks and spans before returning. Handlers may run concurrently; keep conversation state separate.
 
 The client defaults to `https://api.coval.dev/v1`. Set `api_base_url` to use another API root. Audio is PCM16 little-endian, mono, 16 kHz; see the [audio guide](https://docs.coval.ai/sdks/agent-sdk#audio-format-and-limits) for format and buffering requirements.
 

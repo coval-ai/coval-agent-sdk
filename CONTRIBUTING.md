@@ -101,6 +101,8 @@ Keep explanations in their owning document and link to them elsewhere. Use one p
 
 Document the current behavior and the decisions a developer needs to use or change it. The ownership map above determines where an explanation belongs; keep a single authoritative explanation and link to it from other pages.
 
+Distinguish SDK requirements from example choices. Describe an example's filenames, configuration sources, and helper functions as choices, not integration requirements.
+
 ### Write a comment when
 
 - A value, limit, dependency pin, or protocol choice has a reason the code cannot express.
