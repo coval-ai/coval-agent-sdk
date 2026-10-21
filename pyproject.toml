@@ -31,7 +31,7 @@ dependencies = [
 
 [project.urls]
 Source = "https://github.com/coval-ai/coval-agent-sdk"
-Documentation = "https://github.com/coval-ai/coval-agent-sdk#readme"
+Documentation = "https://docs.coval.ai/sdks/agent-sdk"
 Issues = "https://github.com/coval-ai/coval-agent-sdk/issues"
 Changelog = "https://github.com/coval-ai/coval-agent-sdk/blob/main/CHANGELOG.md"
 

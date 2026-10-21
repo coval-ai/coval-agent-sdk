@@ -1,32 +1,30 @@
-# coval-agents-sdk
+# Coval Agent SDK
 
 Connect Python voice agents to Coval simulations through an authenticated outbound WebSocket. Your process runs the agent; Coval supplies the simulated caller, records the conversation, and evaluates the result. The agent does not need a public URL or a listening port.
 
-The distribution is `coval-agent-sdk`, the Python package is `coval_agent_sdk`, and the API is a Python library. Requires Python 3.10 or newer. The initial release candidate is `0.1.0`; install from a checkout until it is published.
+Requires **Python 3.10 or newer**.
 
-## Install from source
-
-From this repository's root, install into an existing Python environment with `uv` or `pip`:
+## Install
 
 ```sh
-uv pip install .
-# Or: python -m pip install .
+python -m pip install coval-agent-sdk
 ```
 
-For SDK development, use the editable setup instead:
+For OpenTelemetry support:
 
 ```sh
-scripts/install
-.venv/bin/python -c "import coval_agent_sdk"
+python -m pip install "coval-agent-sdk[tracing]"
 ```
 
-See [local development](docs/local-development.md) for building a wheel and installing it into another project. A source install does not publish a package. Maintainers can follow [releasing](docs/releasing.md) to configure PyPI publishing.
+The distribution is `coval-agent-sdk`; import it as `coval_agent_sdk`. See the [Agent SDK guide](https://docs.coval.ai/sdks/agent-sdk) for integration and configuration, and [PyPI](https://pypi.org/project/coval-agent-sdk/) for available versions. The SDK is classified as alpha; review release notes when upgrading.
 
 ## Connect an existing agent
 
-The SDK exposes an audio connection, not an agent class. Plug it into your framework's input and output transports. Your application owns agent construction, conversation state, provider clients, and pipeline cleanup.
+Plug the SDK's audio connection into your framework's input and output transports. Your application owns agent construction, conversation state, provider clients, and pipeline cleanup.
 
-Select existing Coval agent, persona, and test-set fixtures in the intended workspace. Configure credentials through your application environment; model-provider credentials stay in your application.
+Before running, select an existing **SDK WebSocket agent**, voice persona, and test set in your Coval workspace. Set `COVAL_API_KEY`, `COVAL_WORKSPACE_ID`, `COVAL_AGENT_ID`, `COVAL_PERSONA_ID`, and `COVAL_TEST_SET_ID` in your application environment. Use a test set with one case for a first run. If the SDK connection type is unavailable in your workspace, contact [Coval support](mailto:support@coval.dev).
+
+The example below runs an **audio loopback**: it sends the caller's audio back unchanged. This checks the SDK connection; replace the handler with your agent's input/output integration to test agent behavior. Model-provider credentials stay in your application.
 
 ```python
 import asyncio
@@ -36,9 +34,6 @@ import coval_agent_sdk
 
 
 async def on_connection(connection: coval_agent_sdk.AudioConnection) -> None:
-    # Minimal audio passthrough to demonstrate the connection contract.
-    # A real integration feeds caller audio into its existing pipeline and
-    # independently sends the pipeline's speech with send_audio().
     async for audio in connection.receive_audio():
         await connection.send_audio(audio)
 
@@ -52,17 +47,21 @@ async def main() -> coval_agent_sdk.RunResult:
         agent_id=os.environ["COVAL_AGENT_ID"],
         persona_id=os.environ["COVAL_PERSONA_ID"],
         test_set_id=os.environ["COVAL_TEST_SET_ID"],
+        iterations=1,
+        concurrency=1,
+        run_timeout_seconds=600,
     )
     return await client.run(config, on_connection=on_connection)
 
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    result = asyncio.run(main())
+    print(result.run_id, result.status)
 ```
 
-`on_connection` is an async connection handler, not a factory: it receives a ready `AudioConnection` and returns nothing. It wires your application into the audio exchange, remains active until the conversation ends, then stops its tasks and finishes its spans before returning. Different conversations may invoke it concurrently; the application or framework owns isolation of conversation state. The SDK never constructs, subclasses, or closes your agent.
+`on_connection` receives a ready `AudioConnection`. In an agent integration, feed `receive_audio()` into the pipeline and independently send its speech with `send_audio()`, so the agent can speak first. Keep the handler active until voice completion, then stop application tasks and finish spans before returning. A handler may run concurrently for different conversations; isolate their state in your application.
 
-`agent_id` selects an existing hosted Coval fixture; it is not a Python object or class. The client defaults to `https://api.coval.dev/v1`; pass `api_base_url` to select another environment. Select the intended workspace explicitly when testing. The Coval API SDK stays private: applications use only this package's client, configuration, audio connection, results, and errors.
+`agent_id` selects the hosted Coval agent configuration. The client uses the production API at `https://api.coval.dev/v1` by default; pass `api_base_url` to select another API root. `run_timeout_seconds` includes queueing and evaluation processing. A local timeout or cancellation stops local work but does not cancel the hosted run.
 
 ## Attach to an existing simulation
 
@@ -98,9 +97,9 @@ Drain incoming audio promptly into a bounded pipeline; unread input is limited t
 
 `RunResult` contains `run_id`, the hosted `status`, and a tuple of completed `conversations`. Each `ConversationResult` contains `simulation_id`, local voice `status`, `received_audio_bytes`, `sent_audio_bytes`, and an optional `trace` outcome. These immutable objects contain no relay credentials or transport objects.
 
-A returned run has completed its execution; this does not mean the agent passed its quality criteria. A returned session describes completed voice transport, not hosted evaluation. With tracing disabled, `session.trace` is `None`. Otherwise, `TraceResult.uploaded_spans` reports delivered spans after a successful upload (`None` when a failure leaves the count unknown), and `TraceResult.error` contains an optional flush/upload failure. The calling application decides how to store or display those outcomes.
+A returned run has completed its execution; this does not mean the agent passed its quality criteria. A `ConversationResult` describes completed voice transport. With tracing disabled, the conversation's `trace` is `None`. Otherwise, `TraceResult.uploaded_spans` reports delivered spans after a successful upload (`None` when a failure leaves the count unknown), and `TraceResult.error` contains an optional flush/upload failure. The calling application decides how to store or display those outcomes.
 
-Catch `CovalError` for SDK-owned failures, or a specific subclass such as `CovalHttpError`, `CovalConnectionError`, `RunError`, or `CovalTraceError`. Adapter exceptions and `asyncio.CancelledError` propagate unchanged after local cleanup; catching `CovalError` does not catch them.
+Catch `CovalError` for SDK-owned failures, or a specific subclass such as `CovalHttpError`, `CovalConnectionError`, `RunError`, or `CovalTraceError`. Application exceptions and `asyncio.CancelledError` propagate unchanged after local cleanup; catching `CovalError` does not catch them.
 
 For constructor and input checks, see [argument validation](docs/developer-api.md#argument-validation).
 
@@ -108,7 +107,7 @@ Failures raise instead of returning success. After a run is created, an SDK run 
 
 ## Optional traces
 
-Install the `tracing` extra from the checkout with `python -m pip install ".[tracing]"`, or request `[tracing]` when installing a built wheel. The base installation does not install or import OpenTelemetry.
+Install `coval-agent-sdk[tracing]` as shown above. The base installation does not install or import OpenTelemetry.
 
 Import the optional exporter explicitly:
 
@@ -124,11 +123,7 @@ Spans may contain prompts, transcripts, and model output. Enable upload only for
 
 ## Develop and contribute
 
-```sh
-scripts/install
-scripts/lint
-scripts/check
-```
+For editable installs and built-wheel testing, see [local development](docs/local-development.md).
 
 [CONTRIBUTING.md](CONTRIBUTING.md) covers setup, tests, and review. [Python conventions](docs/python-style.md) define imports, initializers, Google-style docstrings, types, and formatting. [Architecture](docs/architecture.md) maps module ownership. [CHANGELOG.md](CHANGELOG.md) records user-facing changes, and [SECURITY.md](SECURITY.md) explains private vulnerability reporting.
 

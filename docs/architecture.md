@@ -8,7 +8,7 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 | --- | --- |
 | `src/coval_agent_sdk/__init__.py` | The explicit supported public API and its `__all__`. |
 | `audio.py` | Public per-conversation audio connection, bounded input, and observable completion. |
-| `results.py` | Immutable run, session, and trace outcomes. |
+| `results.py` | Immutable run, conversation, and trace outcomes. |
 | `config.py` | Immutable run configuration and its validation. |
 | `errors.py` | API and relay errors, including partial run outcomes exposed to callers. |
 | `client.py` | Public run handler and connection context entry points. |
@@ -50,8 +50,8 @@ The trace exporter is process-wide but correlates and uploads one conversation a
 
 Keep provider-specific models, agent frameworks, resampling, and application policy in framework transports or consumer projects. Add a core abstraction only when the SDK owns a demonstrated shared contract. A framework integration does not justify making every SDK installation depend on that framework.
 
-Treat public exports and entry points as deliberate API choices. This pre-release package has no reason to ship alternate import names for unexposed implementation helpers. Proposed interface changes belong in [API design](developer-api.md) until their behavior and migration implications are settled.
+Treat public exports as deliberate API choices and keep implementation helpers private. Document supported behavior in [Developer API](developer-api.md). Describe proposed interface changes in an issue before implementation, including their effect on existing integrations and release versioning.
 
 ## Application output
 
-The SDK returns structured outcomes and raises failures. It does not print, log, configure logging, or ship executable package entry points. Applications own presentation, including any launcher they provide. Trace-upload diagnostics belong in session results rather than console warnings.
+The SDK returns structured outcomes and raises failures. It does not print, log, configure logging, or ship executable package entry points. Applications own presentation, including any launcher they provide. Trace-upload diagnostics belong in conversation results.

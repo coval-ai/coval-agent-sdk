@@ -64,4 +64,4 @@ Prompts, transcripts, and model output may appear in spans. Enable export only w
 
 ## Returned outcomes
 
-After cleanup, a successful connection context makes its ConversationResult available through `connection.result`, including identity, local completion status, audio counts, and trace outcome. `run()` returns the run ID, hosted completion status, and completed session results. A post-launch SDK run failure raises `RunError` carrying the known run snapshot. Its status is `None` until a monitoring response supplies one. The SDK emits no console output or log records; applications decide how to present results.
+After cleanup, a successful connection context makes its `ConversationResult` available through `connection.result`, including identity, local completion status, audio counts, and trace outcome. `run()` returns the run ID, hosted completion status, and completed conversation results. A post-launch SDK run failure raises `RunError` carrying the known run snapshot. Its status is `None` until a monitoring response supplies one. The SDK emits no console output or log records; applications decide how to present results.

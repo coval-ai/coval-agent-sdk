@@ -1,22 +1,35 @@
 # Releasing
 
-The initial release candidate is `0.1.0`. [Release Automation](../.github/workflows/release-automation.yml) uses pinned Python Semantic Release tooling to derive versions and generate `CHANGELOG.md` from Conventional Commits. Its `allow_zero_version` configuration supports the initial `0.1.0` release. The version in `pyproject.toml` supplies package metadata; contributors do not update it manually.
+This maintainer guide describes versioning and publication of `coval-agent-sdk`. [Release Automation](../.github/workflows/release-automation.yml) uses pinned Python Semantic Release tooling to derive versions and generate `CHANGELOG.md` from Conventional Commits. Contributors do not edit the package version, changelog, or release tags manually.
 
-## Contributor flow
+## From a pull request to PyPI
 
-Squash-merge each reviewed PR into `main` using its Conventional Commit title. `fix:` and `perf:` produce a patch, `feat:` produces a minor, and `!` or `BREAKING CHANGE:` produces a major, including `1.0.0` from a `0.x` version. Maintenance and documentation commits do not release on their own. The first merged SDK feature provides the initial minor-release signal for `0.1.0`.
+Squash-merge a reviewed PR into `main` using its Conventional Commit title:
 
-Release Automation checks out current `main`, computes the next version, regenerates `CHANGELOG.md`, and creates a local `chore(release): X.Y.Z` commit and matching `vX.Y.Z` tag. It validates that only the changelog and package version changed, then pushes the commit and tag atomically using the Coval Release Automation GitHub App. Concurrent changes to `main` cause validation or the non-fast-forward push to fail rather than overwrite work. The App's own commit does not start another preparation run.
+| Change | Version effect |
+| --- | --- |
+| `fix:` or `perf:` | Patch |
+| `feat:` | Minor |
+| `!` or `BREAKING CHANGE:` | Major, including `1.0.0` from `0.x` |
+| `docs:`, `chore:`, and other types | No release on their own |
 
-The tag starts [the publishing workflow](../.github/workflows/publish.yml). It requires an App-created tag on a generated release commit in `main` history, a matching package version, and a generated changelog entry. It then runs `scripts/check`, builds the distributions, verifies the exact release wheel in a clean base environment, and transfers the artifacts to the isolated `pypi` publishing job.
+Release Automation checks out current `main`, computes the next version, regenerates the changelog, and creates a local `chore(release): X.Y.Z` commit and `vX.Y.Z` tag. It validates that only the changelog and package version changed, then pushes both atomically using a GitHub App installation token. Concurrent changes to `main` fail validation or the non-fast-forward push rather than overwrite work. The App's own commit does not start another preparation run.
 
-Once configured, a releasable merge can therefore lead to a public PyPI upload without a manual version bump or tag. Configure environment approval if maintainers need to approve each upload. `scripts/build` only creates local artifacts. Repository visibility is independent of package publication: a private GitHub repository can publish publicly downloadable Python code.
+The tag starts [Publish](../.github/workflows/publish.yml). It requires an App-created tag on a generated release commit in `main` history, a matching package version, and a generated changelog entry. It runs `scripts/check`, builds distributions, verifies the release wheel in a clean base environment, and passes the artifacts to an isolated `pypi` job for upload with provenance attestations.
 
-## Configure publishing once
+A releasable merge can therefore publish to PyPI automatically. Obtain the required release authorization before merging it; GitHub environment approval applies when configured. `scripts/build` creates local artifacts only. A private GitHub repository can publish publicly downloadable packages, so repository visibility is a separate decision.
 
-Install the existing Coval Release Automation GitHub App on this repository with Contents write access. Make `RELEASE_AUTOMATION_APP_CLIENT_ID` available as a repository variable and `RELEASE_AUTOMATION_APP_PRIVATE_KEY` as a repository secret through the existing maintainer process. The App must be allowed to push its generated commit to `main` under the applicable branch rules. Its installation token also allows tag pushes to start the publishing workflow; GitHub suppresses follow-on workflow triggers for tags pushed with the default `GITHUB_TOKEN`.
+## Updating the PyPI description
 
-Use the intended PyPI owner account or organization and establish maintainer access. For a new project, register a [pending Trusted Publisher](https://docs.pypi.org/trusted-publishers/creating-a-project-through-oidc/) under the owner's account publishing settings:
+PyPI displays the README included in each uploaded distribution. Editing the README on GitHub does not change the description of an already published version. Correct packaged documentation or metadata with a reviewed `fix(docs): ...` PR when a patch release is intended. Confirm any new documentation URLs are live before releasing. Ordinary `docs:` PRs wait for a later releasable change.
+
+Do not reuse a published version number or replace an existing artifact to correct its description. Let automation create a new version containing the corrected README.
+
+## Publishing configuration
+
+Repository maintainers manage the GitHub App installation, branch rules, `pypi` environment, and PyPI Trusted Publisher. The App needs Contents write access and permission to push generated release commits under the applicable branch rules. The workflows use repository variable `RELEASE_AUTOMATION_APP_CLIENT_ID` and secret `RELEASE_AUTOMATION_APP_PRIVATE_KEY`. Keep private keys in GitHub's secret storage. Installation-token pushes allow follow-on workflows to run; tags pushed with the default `GITHUB_TOKEN` do not trigger them.
+
+The PyPI project uses this [Trusted Publisher](https://docs.pypi.org/trusted-publishers/using-a-publisher/) identity:
 
 | Setting | Value |
 | --- | --- |
@@ -26,20 +39,9 @@ Use the intended PyPI owner account or organization and establish maintainer acc
 | Workflow filename | `publish.yml` |
 | Environment | `pypi` |
 
-A pending publisher creates the project on its first successful upload; it does not reserve the package name. If the project already exists, its owner must add this Trusted Publisher in the project's publishing settings instead. Confirm the resulting project ownership and maintainer access after the first upload.
+Manage this publisher in the existing PyPI project's publishing settings. Keep the GitHub environment name identical, restrict its deployment tags to `v*`, and require maintainer approval where the repository's GitHub plan supports it. Workflow files do not configure environment rules, branch protection, squash merging, or PyPI ownership.
 
-Create the GitHub environment `pypi` and configure its protection rules before releasing. Require maintainer review where the repository's GitHub plan supports it, and restrict deployment tags to `v*`. Match the environment name exactly in GitHub and PyPI. This setup is a maintainer action; adding the workflow file does not configure either service.
-
-The separate publish job uses [Trusted Publishing](https://docs.pypi.org/trusted-publishers/using-a-publisher/) with job-scoped `id-token: write` and PyPA's publishing action. Do not add a stored PyPI API token. The build job has read-only repository permissions and cannot request an OIDC token. The publish job downloads the build's distributions without checking out or executing the SDK and includes provenance attestations.
-
-## Before the first public release
-
-- Settle the public API, audio contract, error behavior, and intended version.
-- Review the source, Git history, licenses, notices, examples, and vulnerability-reporting route for the intended public audience.
-- Complete the App, publisher, and environment setup above before merging changes that should release.
-- Require the intended branch checks and squash-merge convention; workflow files do not configure branch protection or merge settings.
-
-The source declares `0.1.0` as the initial candidate. The automation has no release tag until it creates one; source metadata, generated changelog entries, and Git tags do not establish that PyPI accepted an upload.
+The publish job uses job-scoped `id-token: write` and PyPA's publishing action. It downloads the checked artifacts without checking out or executing SDK code. The build job has read-only repository permissions and cannot request an OIDC token. Do not add a stored PyPI API token.
 
 ## Validation and recovery
 
@@ -52,10 +54,10 @@ scripts/check
 scripts/build
 ```
 
-The release suite exercises the real pinned release tool in isolated Git repositories, including initial, patch, minor, breaking, and no-op cases. Ordinary runtime CI still checks Python 3.10, 3.12, and 3.14; release-tool tests run separately on Python 3.12. The publishing workflow runs the package checks on Python 3.12, without waiting on or changing branch-check settings.
+The release suite exercises the pinned release tool in isolated Git repositories, including initial, patch, minor, breaking, and no-op cases. Runtime CI checks Python 3.10, 3.12, and 3.14; release-tool tests run separately on Python 3.12. The publishing workflow runs package checks on Python 3.12.
 
-If preparation fails before the atomic push, rerun `Release Automation` manually from `main`. It considers all commits since the latest release and does nothing when there is no unreleased semantic change. Do not increment a version merely to retry preparation.
+If preparation fails before the atomic push, rerun Release Automation manually from `main`. It considers commits since the latest release and does nothing when there is no unreleased semantic change. Do not increment a version merely to retry preparation.
 
-If preparation succeeded but the package upload failed, fix the publisher/environment problem and rerun the failed publishing job for the same generated tag. A preparation retry will not recreate an existing version. Do not move tags, replace published artifacts, or use a manually pushed tag to bypass the release contract. If the package was uploaded successfully and needs a correction, merge another conventionally titled fix to release a new version.
+If preparation succeeded but upload failed, fix the publisher or environment problem and rerun the failed publishing job for the same generated tag. A preparation retry does not recreate an existing version. Do not move tags, replace artifacts, or push a manual tag to bypass validation. If the package was already uploaded, release a new version containing the correction.
 
-After publishing, verify the version and provenance on PyPI, install the published package into a fresh consumer environment, and exercise the relevant integration. Update installation documentation only after this evidence exists. The automatically generated changelog describes prepared releases; PyPI and successful consumer installation establish package availability.
+After publishing, verify the version and provenance on PyPI, install it into a fresh consumer environment, and exercise the affected integration. A generated changelog or successful local build alone does not prove package availability.

@@ -44,7 +44,7 @@ uv pip install --python /path/to/consumer/.venv/bin/python \
 
 Run the consumer's relevant tests against that installed wheel. Editable-install success does not prove that the source archive or wheel contains every required file.
 
-The Agent Playground Pipecat adapter is one consumer. Its local install hook accepts `COVAL_AGENT_SDK_WHEEL=/absolute/path/to/the/wheel`. Provider configuration and framework dependencies stay with that adapter, not in this package.
+Keep provider configuration and framework dependencies in the consuming project. Its test command should use the same environment into which the wheel was installed.
 
 ## Live checks
 

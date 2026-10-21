@@ -10,7 +10,7 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 - Read `docs/python-style.md` before adding modules, imports, exports, types, docstrings, or lint exceptions.
 - Read `docs/architecture.md` before changing dependency direction or moving state between modules.
 - Read `docs/runtime.md` before changing audio, retries, deadlines, cancellation, or trace cleanup.
-- Read `docs/developer-api.md` before turning a proposed interface into executable behavior.
+- Read `docs/developer-api.md` before changing the supported public interface.
 
 ## Commands
 
@@ -35,7 +35,7 @@ Instructions for coding agents working on the Coval Agent SDK. The closest appli
 ## Package and API
 
 - Use `coval-agent-sdk` as the distribution name, `coval_agent_sdk` as the Python package, and the library API documented in `README.md`.
-- Treat this unreleased SDK as a clean slate; update consumers alongside API changes without compatibility aliases or deprecation paths.
+- Keep one documented public name for each operation; update affected consumers and documentation together when intentionally changing the API.
 - Return outcomes and raise failures without printing, logging, configuring logging, or adding CLI entry points.
 - Keep internal orchestration out of public client reexports; expose a definition through the root facade only when it is part of the reviewed developer API.
 - Keep provider frameworks, backend imports, AWS configuration, and consumer source paths outside the core SDK.
