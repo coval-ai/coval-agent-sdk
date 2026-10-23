@@ -267,3 +267,66 @@ def test_atomic_push_keeps_unpublished_tag_local_when_main_diverges(prepared):
         _git(prepared, "ls-remote", "--heads", "origin", "main").split()[0]
         == concurrent_head
     )
+
+
+@pytest.mark.parametrize("tampered", [False, True])
+def test_real_release_candidate_requires_independent_validation(
+    prepared, tampered
+):
+    base = _git(prepared, "rev-parse", "HEAD^")
+    if tampered:
+        path = prepared / "pyproject.toml"
+        path.write_text(
+            path.read_text() + '\n[tool.unexpected]\ncode = "injected"\n'
+        )
+        _git(prepared, "add", ".")
+        _git(prepared, "commit", "--amend", "--no-edit")
+    artifact = prepared.parent / "candidate-data"
+    helper = _ROOT / "scripts/release_candidate.py"
+    _run(
+        prepared,
+        sys.executable,
+        str(helper),
+        "export",
+        "release",
+        str(artifact),
+        "--tag",
+        "v0.1.0",
+    )
+    publisher = prepared.parent / "publisher"
+    _git(
+        prepared.parent,
+        "clone",
+        "--branch",
+        "main",
+        str(prepared.parent / "remote.git"),
+        str(publisher),
+    )
+    _run(
+        publisher,
+        sys.executable,
+        str(helper),
+        "prepare",
+        "release",
+        str(artifact),
+        "--tag",
+        "v0.1.0",
+        "--base",
+        base,
+    )
+    result = _validate(publisher, "v0.1.0")
+    if tampered:
+        assert result.returncode != 0
+        assert "may only change project.version" in result.stderr
+    else:
+        assert result.returncode == 0, result.stderr
+        _git(
+            publisher,
+            "push",
+            "--atomic",
+            "origin",
+            "HEAD:refs/heads/main",
+            "refs/tags/v0.1.0",
+        )
+    remote = _git(publisher, "ls-remote", "origin", "refs/heads/main")
+    assert remote.startswith(base) is tampered
