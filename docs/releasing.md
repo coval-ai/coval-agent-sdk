@@ -13,7 +13,7 @@ Squash-merge a reviewed PR into `main` using its Conventional Commit title:
 | `!` or `BREAKING CHANGE:` | Major, including `1.0.0` from `0.x` |
 | `docs:`, `chore:`, and other types | No release on their own |
 
-Release Automation checks out current `main`, computes the next version, regenerates the changelog, and creates a local `chore(release): X.Y.Z` commit and `vX.Y.Z` tag. It validates that only the changelog and package version changed, then pushes both atomically using a GitHub App installation token. Concurrent changes to `main` fail validation or the non-fast-forward push rather than overwrite work. The App's own commit does not start another preparation run.
+Release Automation checks out current `main`, computes the next version, regenerates the changelog, and creates a local `chore(release): X.Y.Z` commit and `vX.Y.Z` tag. The read-only preparation job exports a patch and hash-bound manifest. A separate job in the main-only `release-automation` environment checks out the workflow event’s protected-main revision, validates artifact integrity, base identity, allowed regular-file paths, and version-only changes, then reconstructs and validates the commit using trusted standard-library tooling. That job installs no dependencies and executes no candidate code. Only after validation does it mint the GitHub App token and push the commit and tag atomically. Concurrent changes to `main` fail validation or the non-fast-forward push rather than overwrite work. The App's own commit does not start another preparation run.
 
 The tag starts [Publish](../.github/workflows/publish.yml). It requires an App-created tag on a generated release commit in `main` history, a matching package version, and a generated changelog entry. It runs `scripts/check`, builds distributions, verifies the release wheel in a clean base environment, and passes the artifacts to an isolated `pypi` job for upload with provenance attestations.
 
@@ -27,7 +27,7 @@ Do not reuse a published version number or replace an existing artifact to corre
 
 ## Publishing configuration
 
-Repository maintainers manage the GitHub App installation, branch rules, `pypi` environment, and PyPI Trusted Publisher. The App needs Contents write access and permission to push generated release commits under the applicable branch rules. The workflows use repository variable `RELEASE_AUTOMATION_APP_CLIENT_ID` and secret `RELEASE_AUTOMATION_APP_PRIVATE_KEY`. Keep private keys in GitHub's secret storage. Installation-token pushes allow follow-on workflows to run; tags pushed with the default `GITHUB_TOKEN` do not trigger them.
+Repository maintainers manage the GitHub App installation, branch rules, `pypi` environment, and PyPI Trusted Publisher. The App needs Contents write access and permission to push generated release commits under the applicable branch rules. The workflows use repository variable `RELEASE_AUTOMATION_APP_CLIENT_ID` and this repository’s distinct `RELEASE_AUTOMATION_APP_PRIVATE_KEY` environment secret. Store the key only in `release-automation`, with a deployment branch policy permitting exactly the `main` branch and no reviewer gate so releases remain automatic. Stage the environment key before merging the workflow cutover, then remove the old repository-level copy. Never retrieve an encrypted key through a workflow; use the original maintainer key file or an approved replacement. Installation-token pushes allow follow-on workflows to run; tags pushed with the default `GITHUB_TOKEN` do not trigger them.
 
 The PyPI project uses this [Trusted Publisher](https://docs.pypi.org/trusted-publishers/using-a-publisher/) identity:
 
@@ -61,3 +61,7 @@ If preparation fails before the atomic push, rerun Release Automation manually f
 If preparation succeeded but upload failed, fix the publisher or environment problem and rerun the failed publishing job for the same generated tag. A preparation retry does not recreate an existing version. Do not move tags, replace artifacts, or push a manual tag to bypass validation. If the package was already uploaded, release a new version containing the correction.
 
 After publishing, verify the version and provenance on PyPI, install it into a fresh consumer environment, and exercise the affected integration. A generated changelog or successful local build alone does not prove package availability.
+
+## Workflow dependencies
+
+Pin maintained Actions to full commit SHAs and update the corresponding version comment when upgrading. Keep checkout credentials unpersisted, keep build jobs read-only, and preserve the separation between candidate preparation, App-authenticated promotion, and registry OIDC upload. Validate workflow policy and artifact rejection cases through the release tests before changing these boundaries.

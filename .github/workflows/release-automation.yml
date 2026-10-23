@@ -18,6 +18,9 @@ jobs:
     if: github.actor != 'coval-release-automation[bot]'
     runs-on: ubuntu-latest
     timeout-minutes: 15
+    outputs:
+      released: ${{ steps.version.outputs.released }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - name: Require main
         run: |
@@ -25,18 +28,13 @@ jobs:
             echo "Release Automation must run from main." >&2
             exit 1
           fi
-      - name: Create release automation token
-        id: app-token
-        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
-        with:
-          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
-          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
-          permission-contents: write
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           fetch-depth: 0
           ref: main
-          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
+      - name: Require the event revision
+        run: test "$(git rev-parse HEAD)" = "$GITHUB_SHA"
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6
         with:
           version: "0.9.4"
@@ -47,7 +45,7 @@ jobs:
       - name: Prepare release locally
         id: version
         run: .venv/bin/semantic-release version --no-push --no-vcs-release --skip-build
-      - name: Validate and push generated release
+      - name: Export validated release data
         if: steps.version.outputs.released == 'true'
         env:
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
@@ -55,4 +53,51 @@ jobs:
           set -euo pipefail
           git fetch origin main:refs/remotes/origin/main
           .venv/bin/python scripts/validate_release.py prepared "$RELEASE_TAG"
-          git push --atomic origin HEAD:refs/heads/main "refs/tags/$RELEASE_TAG"
+          .venv/bin/python scripts/release_candidate.py export release "$RUNNER_TEMP/release-candidate" --tag "$RELEASE_TAG"
+      - name: Upload release candidate
+        if: steps.version.outputs.released == 'true'
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: release-candidate
+          path: ${{ runner.temp }}/release-candidate/
+          if-no-files-found: error
+          retention-days: 1
+
+  promote:
+    name: Validate and push release metadata
+    needs: release
+    if: needs.release.outputs.released == 'true' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    environment: release-automation
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          fetch-depth: 0
+          ref: ${{ github.sha }}
+          persist-credentials: false
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: release-candidate
+          path: ${{ runner.temp }}/release-candidate/
+      - name: Independently validate release data
+        env:
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: |
+          set -euo pipefail
+          python3 scripts/release_candidate.py prepare release "$RUNNER_TEMP/release-candidate" --tag "$RELEASE_TAG" --base "$GITHUB_SHA"
+          python3 scripts/validate_release.py prepared "$RELEASE_TAG"
+      - name: Create release automation token
+        id: app-token
+        uses: actions/create-github-app-token@bcd2ba49218906704ab6c1aa796996da409d3eb1 # v3.2.0
+        with:
+          client-id: ${{ vars.RELEASE_AUTOMATION_APP_CLIENT_ID }}
+          private-key: ${{ secrets.RELEASE_AUTOMATION_APP_PRIVATE_KEY }}
+          permission-contents: write
+      - name: Push validated release atomically
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          RELEASE_TAG: ${{ needs.release.outputs.tag }}
+        run: >-
+          git -c credential.helper= -c 'credential.helper=!gh auth git-credential'
+          push --atomic origin HEAD:refs/heads/main "refs/tags/$RELEASE_TAG"
