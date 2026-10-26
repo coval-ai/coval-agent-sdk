@@ -4,6 +4,8 @@ This maintainer guide describes versioning and publication of `coval-agent-sdk`.
 
 ## From a pull request to PyPI
 
+The [PR title workflow](../.github/workflows/pr-title.yml) checks PRs targeting `main` when opened, edited, reopened, synchronized, or marked ready for review. Titles must use `<type>[optional scope][!]: <description>` with one of `build`, `chore`, `ci`, `docs`, `feat`, `fix`, `perf`, `refactor`, `style`, or `test`. Squash merges default to the PR title with a blank commit body, so mark breaking changes with `!` in the title, such as `feat(api)!: replace the client`; a footer in the PR description is not carried into the commit. The workflow reads event metadata without checking out PR code or requesting token permissions. After the workflow lands on `main`, add `Conventional Commit title` as a required check in the SDK CI ruleset to block malformed titles from merging.
+
 Squash-merge a reviewed PR into `main` using its Conventional Commit title:
 
 | Change | Version effect |
