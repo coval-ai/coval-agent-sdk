@@ -1,0 +1,42 @@
+name: PR title
+
+on:
+  pull_request_target:
+    branches: [main]
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions: {}
+
+concurrency:
+  group: pr-title-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  pr-title:
+    name: Conventional Commit title
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      # Only inspect event metadata; never check out or execute pull request code.
+      - name: Validate the squash commit title
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          import re
+          import sys
+          from pathlib import Path
+
+          title = json.loads(Path(os.environ["GITHUB_EVENT_PATH"]).read_text())["pull_request"]["title"]
+          # Match the types supported by the pinned Conventional Commit release parser.
+          types = "build|chore|ci|docs|feat|fix|perf|refactor|style|test"
+          pattern = rf"({types})(\([^()\r\n]+\))?!?: \S(?:[^\r\n]*\S)?"
+          if not re.fullmatch(pattern, title):
+              sys.exit(
+                  "PR title must use <type>[optional scope][!]: <description>, "
+                  "for example 'fix: preserve cancellation' or 'feat(api)!: replace the client'. "
+                  f"Allowed types: {types.replace('|', ', ')}. "
+                  "Use ! in the title for breaking changes; the squash commit body is blank."
+              )
+          print("PR title is a valid Conventional Commit subject.")
+          PY
