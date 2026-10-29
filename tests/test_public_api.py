@@ -132,6 +132,17 @@ def api_endpoint():
                         else "RUNNING"
                     }
                 }
+            elif target.path in {
+                f"/v1/simulations/{name}" for name in state["ids"]
+            }:
+                name = target.path.rsplit("/", 1)[1]
+                response = {
+                    "simulation": {
+                        "status": "COMPLETED"
+                        if name in state["completed"]
+                        else "RUNNING"
+                    }
+                }
             elif target.path.endswith("/connect"):
                 simulation_id = target.path.split("/")[-2]
                 response = {
@@ -319,8 +330,9 @@ async def test_public_client_completes_authenticated_wire_journey(
 
 
 @pytest.mark.asyncio
-async def test_public_batch_keeps_tls_peers_and_queued_session_after_1013(
-    monkeypatch, api_endpoint, tls_contexts
+@pytest.mark.parametrize("close_code", [1013, None])
+async def test_public_batch_keeps_tls_peers_and_queued_session_after_failure(
+    monkeypatch, api_endpoint, tls_contexts, close_code
 ):
     url, state = api_endpoint
     serving, trusting = tls_contexts
@@ -341,7 +353,10 @@ async def test_public_batch_keeps_tls_peers_and_queued_session_after_1013(
             if name == bad:
                 await healthy_started.wait()
                 state["completed"].add(name)
-                await socket.close(1013, "synthetic overload")
+                if close_code is None:
+                    socket.transport.abort()
+                else:
+                    await socket.close(close_code, "synthetic overload")
                 return
             if name == healthy:
                 healthy_started.set()
@@ -406,7 +421,8 @@ async def test_public_batch_keeps_tls_peers_and_queued_session_after_1013(
         coval_agent_sdk.ConversationFailure(
             bad,
             "CovalError",
-            f"Simulation {bad} relay closed without completion (code 1013).",
+            f"Simulation {bad} relay closed without completion "
+            f"(code {close_code}).",
         ),
     )
     assert closed == cleaned == set(state["ids"])

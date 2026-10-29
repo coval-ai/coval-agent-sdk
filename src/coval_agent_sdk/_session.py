@@ -123,7 +123,7 @@ class _Session:
             close_code = exception.rcvd.code if exception.rcvd else None
             if (
                 self.state.ready.is_set()
-                and close_code in {None, 1000, 1001}
+                and isinstance(exception, exceptions.ConnectionClosedOK)
                 and await _confirm_completed_after_close(
                     self._api, self.connection.simulation_id
                 )

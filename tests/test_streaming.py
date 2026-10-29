@@ -331,9 +331,8 @@ async def test_only_one_receiver_and_early_exit_never_reports_success(
         "INVALID_JSON",
     ],
 )
-@pytest.mark.parametrize("abnormal", [False, True])
 async def test_lost_terminal_frame_requires_authoritative_completion(
-    monkeypatch, status, abnormal
+    monkeypatch, status
 ):
     socket = Socket(READY)
     voice = setup_connection(monkeypatch, socket)
@@ -356,11 +355,7 @@ async def test_lost_terminal_frame_requires_authoritative_completion(
 
     async def exchange():
         async with voice.connect("conversation-a") as connection:
-            socket.messages.put_nowait(
-                exceptions.ConnectionClosedError(None, None)
-                if abnormal
-                else None
-            )
+            socket.messages.put_nowait(None)
             await connection.wait_closed()
         return connection.result
 
@@ -374,9 +369,18 @@ async def test_lost_terminal_frame_requires_authoritative_completion(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("code", [1008, 1013])
-async def test_explicit_relay_rejection_never_falls_back_to_success(
-    monkeypatch, code
+@pytest.mark.parametrize(
+    ("received", "sent"),
+    [
+        (frames.Close(1008, "rejected"), None),
+        (frames.Close(1013, "overloaded"), None),
+        (None, None),
+        (None, frames.Close(1011, "keepalive ping timeout")),
+        (frames.Close(1000, "closed"), frames.Close(1011, "failed")),
+    ],
+)
+async def test_abnormal_relay_close_never_falls_back_to_success(
+    monkeypatch, received, sent
 ):
     socket = Socket(READY)
     voice = setup_connection(monkeypatch, socket)
@@ -386,11 +390,37 @@ async def test_explicit_relay_rejection_never_falls_back_to_success(
         async with voice.connect("conversation-a") as connection:
             socket.messages.put_nowait(
                 exceptions.ConnectionClosedError(
-                    frames.Close(code, "rejected"), None
+                    received,
+                    sent,
+                    False
+                    if received is not None and sent is not None
+                    else None,
                 )
             )
             await connection.wait_closed()
     read.assert_not_awaited()
+    assert socket.closed
+
+
+@pytest.mark.asyncio
+async def test_normal_close_during_ack_requires_authoritative_completion(
+    monkeypatch,
+):
+    socket = Socket(READY)
+    voice = setup_connection(monkeypatch, socket)
+    read = mock.AsyncMock(return_value={"simulation": {"status": "COMPLETED"}})
+    monkeypatch.setattr(voice._api, "get", read)
+    socket.send = mock.AsyncMock(
+        side_effect=exceptions.ConnectionClosedOK(
+            frames.Close(1000, "closed"), frames.Close(1000, "closed"), True
+        )
+    )
+    async with voice.connect("conversation-a") as connection:
+        socket.messages.put_nowait(PCM)
+        await connection.wait_closed()
+    assert connection.result.status == "COMPLETED"
+    socket.send.assert_awaited_once()
+    read.assert_awaited_once()
     assert socket.closed
 
 
