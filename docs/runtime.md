@@ -48,9 +48,9 @@ Monitoring paginates simulations, defers PENDING/IN QUEUE conversations without 
 
 ## Relay closure and authoritative completion
 
-A session requires one valid `session_ready` before `session_end`; repeated readiness and malformed control JSON fail as SDK protocol errors. Normally the relay sends `session_end`. If the connection ends after readiness without that frame, the SDK gives the simulation API up to ten seconds to confirm `COMPLETED`. Failed, cancelled, malformed, unavailable, and still-pending outcomes remain errors. Closure before readiness cannot claim completion.
+A session requires one valid `session_ready` before `session_end`; repeated readiness and malformed control JSON fail as SDK protocol errors. Normally the relay sends `session_end`. If the connection closes normally after readiness without that frame, the SDK gives the simulation API up to ten seconds to confirm `COMPLETED`. Failed, cancelled, malformed, unavailable, and still-pending outcomes remain errors. Closure before readiness cannot claim completion.
 
-Explicit protocol and overload rejections remain errors even if a later API read could report completion. The confirmation path does not reconnect or launch another conversation.
+Abnormal transport losses, failed close handshakes, and explicit protocol or overload rejections remain errors even if a later API read could report completion. A transport failure without a received close frame cannot use completion confirmation. The confirmation path does not reconnect or launch another conversation.
 
 ## Trace lifecycle
 
