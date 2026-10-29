@@ -541,7 +541,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 discover.assert_awaited_once()
                 sleep.assert_not_awaited()
 
-    async def test_failed_session_cancels_other_connections(self) -> None:
+    async def test_denied_session_cancels_other_connections(self) -> None:
         waiting_started = asyncio.Event()
         waiting_cancelled = asyncio.Event()
 
@@ -550,7 +550,9 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         ) -> None:
             if simulation_id == "broken":
                 await waiting_started.wait()
-                raise errors.CovalError("session failed")
+                raise errors.CovalHttpError(
+                    status_code=403, message="session denied"
+                )
             waiting_started.set()
             try:
                 await asyncio.Event().wait()
@@ -563,7 +565,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         with (
             mock.patch.object(_session, "run_session", fake_run_session),
             mock.patch.object(_defaults, "POLL_INTERVAL_SECONDS", 0),
-            self.assertRaisesRegex(errors.CovalError, "session failed"),
+            self.assertRaisesRegex(errors.CovalError, "session denied"),
         ):
             await _runs.launch_and_run(FakeApi(), config, lambda _id: None)
 

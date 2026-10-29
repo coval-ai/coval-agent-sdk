@@ -16,11 +16,11 @@ Framework plugins use this connection as an input/output transport. They may liv
 
 ## Results and failures
 
-`run()` returns immutable `RunResult` with `run_id`, hosted `status`, and `conversations: tuple[ConversationResult, ...]`. Successful completion requires a completed hosted run and all observed conversations attached and completed locally. Execution completion does not mean quality criteria passed.
+`run()` returns immutable `RunResult` with `run_id`, hosted `status`, `conversations: tuple[ConversationResult, ...]`, and `failures: tuple[ConversationFailure, ...]` (empty on success). Successful completion requires a completed hosted run and all observed conversations attached and completed locally. Execution completion does not mean quality criteria passed.
 
 After a successful connection context, `connection.result` is a `ConversationResult` with `simulation_id`, local voice `status`, PCM byte counts, and optional `trace: TraceResult`. Disabled tracing is None; delivery failures retain structured diagnostics without failing completed voice. Results contain no dependency clients, credentials or transport objects.
 
-After launch, SDK run failures raise `RunError` with a partial result and last observed hosted status. Application exceptions and cancellation propagate unchanged after local cleanup. All SDK-owned errors derive from `CovalError`; they do not contain generated API SDK response types. The application owns presentation; the SDK emits no logs or console output.
+An SDK session failure does not stop unrelated or queued conversations. Once the batch finishes, it raises `RunError`; `error.result.conversations` contains successful sessions and `error.result.failures` retains each failed simulation ID, SDK exception `error_type`, and diagnostic `message`. A hosted COMPLETED status cannot override a local transport failure. Global monitoring failures, session authentication/authorization failures and the batch deadline still stop local work promptly. After launch, SDK run failures retain the last observed hosted status in the error result. Application exceptions and cancellation propagate unchanged after local cleanup. All SDK-owned errors derive from `CovalError`; they do not contain generated API SDK response types. The application owns presentation; the SDK emits no logs or console output.
 
 ## Distribution and optional integrations
 

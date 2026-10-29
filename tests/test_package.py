@@ -28,6 +28,7 @@ def test_public_facade_exports_the_documented_definitions():
         "RunError": errors.RunError,
         "RunResult": results.RunResult,
         "ConversationResult": results.ConversationResult,
+        "ConversationFailure": results.ConversationFailure,
         "TraceResult": results.TraceResult,
         "TraceExporter": telemetry.TraceExporter,
         "AudioConnection": audio.AudioConnection,

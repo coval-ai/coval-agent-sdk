@@ -8,6 +8,7 @@ from coval_agent_sdk.errors import CovalError
 from coval_agent_sdk.errors import CovalHttpError
 from coval_agent_sdk.errors import CovalTraceError
 from coval_agent_sdk.errors import RunError
+from coval_agent_sdk.results import ConversationFailure
 from coval_agent_sdk.results import ConversationResult
 from coval_agent_sdk.results import RunResult
 from coval_agent_sdk.results import TraceResult
@@ -15,6 +16,7 @@ from coval_agent_sdk.telemetry import TraceExporter
 
 __all__ = [
     "AudioConnection",
+    "ConversationFailure",
     "ConversationResult",
     "CovalConnectionError",
     "CovalError",

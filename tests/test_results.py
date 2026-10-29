@@ -392,15 +392,23 @@ async def test_cancellation_awaits_application_cleanup(monkeypatch, entry):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    "failure_kind", ["application", "sdk", "cancellation", "relay"]
+    "failure_kind",
+    ["application", "sdk", "authentication", "cancellation", "relay"],
 )
-async def test_failure_cancels_and_awaits_real_sibling_handlers(
+async def test_session_isolation_preserves_application_cleanup_and_fatal_errors(
     monkeypatch, failure_kind
 ):
     client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
-    sockets = setup_run(monkeypatch, client, "RUNNING", ("broken", "waiting"))
+    isolated = failure_kind in {"sdk", "relay"}
+    sockets = setup_run(
+        monkeypatch,
+        client,
+        "COMPLETED" if isolated else "RUNNING",
+        ("broken", "waiting"),
+    )
     sibling_started, sibling_cleaned = asyncio.Event(), asyncio.Event()
     broken_cleaned = asyncio.Event()
+    sibling_cancelled = False
     if failure_kind == "relay":
 
         class BrokenSocket(Socket):
@@ -419,12 +427,15 @@ async def test_failure_cancels_and_awaits_real_sibling_handlers(
     original = (
         coval_agent_sdk.CovalError("SDK failed")
         if failure_kind == "sdk"
+        else coval_agent_sdk.CovalHttpError(status_code=401, message="denied")
+        if failure_kind == "authentication"
         else asyncio.CancelledError("stopped")
         if failure_kind == "cancellation"
         else RuntimeError("application failed")
     )
 
     async def application(connection):
+        nonlocal sibling_cancelled
         if connection.simulation_id == "broken":
             await sibling_started.wait()
             if failure_kind == "relay":
@@ -432,17 +443,27 @@ async def test_failure_cancels_and_awaits_real_sibling_handlers(
                     await asyncio.Event().wait()
                 finally:
                     broken_cleaned.set()
-            raise original
+            try:
+                raise original
+            finally:
+                broken_cleaned.set()
         sibling_started.set()
         try:
-            await asyncio.Event().wait()
+            if isolated:
+                await broken_cleaned.wait()
+                await handle(connection)
+            else:
+                await asyncio.Event().wait()
+        except asyncio.CancelledError:
+            sibling_cancelled = True
+            raise
         finally:
             await asyncio.sleep(0)
             sibling_cleaned.set()
 
     expected = (
         coval_agent_sdk.RunError
-        if failure_kind in {"sdk", "relay"}
+        if failure_kind in {"sdk", "relay", "authentication"}
         else type(original)
     )
     with pytest.raises(expected) as raised:
@@ -455,8 +476,15 @@ async def test_failure_cancels_and_awaits_real_sibling_handlers(
         )
     if failure_kind == "application":
         assert raised.value is original
-    if failure_kind == "sdk":
+    if failure_kind in {"sdk", "authentication"}:
         assert raised.value.__cause__ is original
+    if isolated:
+        assert raised.value.result.conversations == (
+            coval_agent_sdk.ConversationResult("waiting", 640, 640),
+        )
+        assert len(raised.value.result.failures) == 1
+        assert raised.value.result.failures[0].simulation_id == "broken"
+    assert sibling_cancelled is not isolated
     assert sibling_cleaned.is_set()
     if failure_kind == "relay":
         assert broken_cleaned.is_set()

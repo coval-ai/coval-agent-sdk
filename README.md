@@ -72,9 +72,9 @@ Read `connection.result` after the context exits successfully. Leaving before vo
 
 ## Results and errors
 
-`RunResult` contains the run ID, hosted status, and completed `conversations`. Each `ConversationResult` includes its simulation ID, audio byte counts, and optional trace delivery result. Execution completion does not mean the agent passed its evaluation criteria.
+`RunResult` contains the run ID, hosted status, completed `conversations`, and SDK session `failures`. Each `ConversationFailure` retains the simulation ID, exception type and diagnostic message. Each `ConversationResult` includes its simulation ID, audio byte counts, and optional trace delivery result. Execution completion does not mean the agent passed its evaluation criteria.
 
-Catch `CovalError` for SDK failures. After launch, `RunError.result` retains the run ID, last observed status, and completed conversations. Application exceptions and cancellation propagate unchanged. See [Developer API](docs/developer-api.md) for result types and argument validation.
+Catch `CovalError` for SDK failures. A failed voice session is isolated while the SDK continues attaching and serving unrelated conversations. After the batch finishes, `RunError.result` retains the run ID, last observed status, completed conversations, and per-session failures. Authentication/authorization errors, global monitoring errors and the batch deadline still stop local work promptly. Application exceptions and cancellation propagate unchanged. See [Developer API](docs/developer-api.md) for result types and argument validation.
 
 ## Tracing
 
