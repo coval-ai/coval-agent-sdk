@@ -112,6 +112,7 @@ async def launch_and_run(
                 run_id=state.run_id,
                 status=state.status,
                 conversations=_completed_sessions(active),
+                failures=_failed_sessions(active),
             ),
         ) from exception
 
@@ -125,6 +126,40 @@ def _completed_sessions(
         for task in active.values()
         if task.done() and not task.cancelled() and task.exception() is None
     )
+
+
+def _failed_sessions(
+    active: dict[str, asyncio.Task[results.ConversationResult]],
+) -> tuple[results.ConversationFailure, ...]:
+    """Retain session diagnostics separately from successful outcomes."""
+    failures: list[results.ConversationFailure] = []
+    for simulation_id, task in active.items():
+        if task.done() and not task.cancelled():
+            exception = task.exception()
+            if isinstance(exception, errors.CovalError):
+                failures.append(
+                    results.ConversationFailure(
+                        simulation_id, type(exception).__name__, str(exception)
+                    )
+                )
+    return tuple(failures)
+
+
+def _raise_fatal_session_errors(
+    active: dict[str, asyncio.Task[results.ConversationResult]],
+) -> None:
+    """Isolate SDK session failures while preserving global stop conditions."""
+    for task in active.values():
+        if not task.done():
+            continue
+        if not task.cancelled():
+            exception = task.exception()
+            if isinstance(exception, errors.CovalError) and not (
+                isinstance(exception, errors.CovalHttpError)
+                and exception.status_code in {401, 403}
+            ):
+                continue
+        task.result()
 
 
 async def _launch_and_run(
@@ -160,9 +195,7 @@ async def _launch_and_run(
         await _attach_simulations(
             api, run_id, deadline, on_connection, trace_exporter, seen, active
         )
-        for task in active.values():
-            if task.done():
-                task.result()
+        _raise_fatal_session_errors(active)
         run_response = await _get_monitoring_resource(
             api, f"runs/{parse.quote(run_id, safe='')}", run_deadline=deadline
         )

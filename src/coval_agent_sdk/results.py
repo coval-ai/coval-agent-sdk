@@ -46,6 +46,21 @@ class ConversationResult:
 
 
 @dataclasses.dataclass(frozen=True)
+class ConversationFailure:
+    """Describe one failed local session after its resource cleanup.
+
+    Attributes:
+        simulation_id: Identifier of the affected hosted conversation.
+        error_type: Name of the SDK exception type.
+        message: SDK diagnostic describing the session failure.
+    """
+
+    simulation_id: str
+    error_type: str
+    message: str
+
+
+@dataclasses.dataclass(frozen=True)
 class RunResult:
     """Describe a hosted run and locally completed voice conversations.
 
@@ -57,10 +72,13 @@ class RunResult:
         status: Last observed monitoring status, or None before the first
             status response. This does not indicate whether quality criteria
             passed.
-        conversations: Completed local sessions in discovery order. On failure,
-            unfinished, failed, or missed conversations have no success result.
+        conversations: Completed local sessions in discovery order. Unfinished,
+            failed, or missed conversations have no success result.
+        failures: SDK session failures in discovery order. Unfinished or
+            cancelled sessions and global monitoring failures are excluded.
     """
 
     run_id: str
     status: str | None
     conversations: tuple[ConversationResult, ...]
+    failures: tuple[ConversationFailure, ...] = ()

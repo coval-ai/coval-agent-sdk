@@ -77,6 +77,8 @@ def api_endpoint():
         "relay_url": None,
         "completed": set(),
         "offer_overrides": {},
+        "ids": IDS,
+        "queued_until": {},
     }
 
     class Handler(http_server.BaseHTTPRequestHandler):
@@ -107,8 +109,17 @@ def api_endpoint():
                 second_page = "page_token" in query
                 response = {
                     "simulations": [
-                        {"simulation_id": name, "status": "RUNNING"}
-                        for name in (IDS if second_page else IDS[:1])
+                        {
+                            "simulation_id": name,
+                            "status": "IN QUEUE"
+                            if name in state["queued_until"]
+                            and state["queued_until"][name]
+                            not in state["completed"]
+                            else "RUNNING",
+                        }
+                        for name in (
+                            state["ids"] if second_page else state["ids"][:1]
+                        )
                     ],
                 }
                 if not second_page:
@@ -117,7 +128,7 @@ def api_endpoint():
                 response = {
                     "run": {
                         "status": "COMPLETED"
-                        if state["completed"] == set(IDS)
+                        if state["completed"] == set(state["ids"])
                         else "RUNNING"
                     }
                 }
@@ -305,6 +316,102 @@ async def test_public_client_completes_authenticated_wire_journey(
         connections[0].result.sent_audio_bytes = 0
     assert capsys.readouterr() == ("", "")
     assert caplog.records == []
+
+
+@pytest.mark.asyncio
+async def test_public_batch_keeps_tls_peers_and_queued_session_after_1013(
+    monkeypatch, api_endpoint, tls_contexts
+):
+    url, state = api_endpoint
+    serving, trusting = tls_contexts
+    bad, healthy, queued = (*IDS, "conversation-c")
+    state["ids"] = (bad, healthy, queued)
+    state["queued_until"] = {queued: bad}
+    healthy_started, queued_started = asyncio.Event(), asyncio.Event()
+    closed, cleaned = set(), set()
+
+    async def relay(socket):
+        name = socket.request.path.removeprefix("/sessions/")
+        assert (
+            socket.request.headers["Authorization"]
+            == f"Bearer synthetic-{name}"
+        )
+        try:
+            await socket.send(READY)
+            if name == bad:
+                await healthy_started.wait()
+                state["completed"].add(name)
+                await socket.close(1013, "synthetic overload")
+                return
+            if name == healthy:
+                healthy_started.set()
+                await queued_started.wait()
+            else:
+                queued_started.set()
+            await socket.send(REPLY)
+            assert json.loads(await socket.recv()) == {
+                "type": "audio_ack",
+                "received_bytes": len(REPLY),
+            }
+            assert await socket.recv() == REPLY
+            state["completed"].add(name)
+            await socket.send('{"type":"session_end"}')
+            await socket.wait_closed()
+        finally:
+            closed.add(name)
+
+    async def application(connection):
+        try:
+            async for audio in connection.receive_audio():
+                await connection.send_audio(audio)
+        finally:
+            cleaned.add(connection.simulation_id)
+
+    connect = _connection.client.connect
+
+    async def connect_with_ca(*args, **kwargs):
+        return await connect(*args, ssl=trusting, **kwargs)
+
+    monkeypatch.setattr(_connection.client, "connect", connect_with_ca)
+    monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0.001)
+    async with websocket_server.serve(
+        relay, "127.0.0.1", 0, ssl=serving, close_timeout=0.2
+    ) as hosted:
+        state["relay_url"] = (
+            f"wss://127.0.0.1:{hosted.sockets[0].getsockname()[1]}/sessions"
+        )
+        client = coval_agent_sdk.CovalVoiceClient(
+            api_key="synthetic-key",
+            api_base_url=url,
+            workspace_id="workspace-wire",
+        )
+        with pytest.raises(coval_agent_sdk.RunError) as raised:
+            await asyncio.wait_for(
+                client.run(
+                    coval_agent_sdk.RunConfig(
+                        "agent-wire",
+                        "persona-wire",
+                        "set-wire",
+                        concurrency=2,
+                        run_timeout_seconds=4,
+                    ),
+                    application,
+                ),
+                5,
+            )
+    result = raised.value.result
+    assert result.status == "COMPLETED"
+    assert {c.simulation_id for c in result.conversations} == {healthy, queued}
+    assert result.failures == (
+        coval_agent_sdk.ConversationFailure(
+            bad,
+            "CovalError",
+            f"Simulation {bad} relay closed without completion (code 1013).",
+        ),
+    )
+    assert closed == cleaned == set(state["ids"])
+    assert len([r for r in state["requests"] if r[0] == "POST"]) == 1
+    assert not any(r[1] == f"/v1/simulations/{bad}" for r in state["requests"])
 
 
 @pytest.mark.parametrize(

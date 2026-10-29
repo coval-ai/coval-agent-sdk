@@ -42,7 +42,7 @@ Tracing sends encoded protobuf through the same private adapter as JSON API requ
 
 A client holds API configuration and an optional trace exporter. Each connection context owns a relay reader and AudioConnection. The connection owns its bounded incoming buffer, readiness/completion events, and audio byte counts. The private PCM writer owns a send lock and cross-call pacing. The SDK never creates or closes an application agent. Application handlers release pipeline resources before the SDK finalizes traces.
 
-Run monitoring records every created task before continuing discovery, so a later-page failure can still cancel and await all active local sessions. It tracks conversations that ended before attachment rather than silently reporting a partial run as complete. Cancelling local tasks does not imply the hosted run was cancelled.
+Run monitoring records every created task before continuing discovery, so a later-page failure can still cancel and await all active local sessions. Per-session SDK errors remain attached to their tasks while unrelated conversations continue; they become immutable failure records in the final RunError snapshot. Authentication/authorization errors and non-SDK application failures retain immediate sibling cancellation. It tracks conversations that ended before attachment rather than silently reporting a partial run as complete. Cancelling local tasks does not imply the hosted run was cancelled.
 
 The trace exporter is process-wide but correlates and uploads one conversation at a time. Its lock protects buffer accounting and upload ownership; network calls happen outside the lock. [Runtime contracts](runtime.md) describe the failure paths reviewers must preserve.
 

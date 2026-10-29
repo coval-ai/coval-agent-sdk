@@ -90,6 +90,9 @@ class CovalVoiceClient:
         completion, and releases application resources before returning. It
         may run concurrently for different conversations. A transport failure
         cancels and awaits the handler, allowing its finally blocks to run.
+        SDK session failures allow unrelated conversations to finish before
+        RunError reports their individual outcomes. Authentication failures,
+        application errors and global run failures stop local work promptly.
 
         Args:
             config: Fixture identifiers, concurrency, and total run deadline.
