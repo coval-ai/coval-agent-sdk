@@ -1,6 +1,24 @@
 # CHANGELOG
 
 
+## v0.1.2 (2026-10-29)
+
+### Bug Fixes
+
+- [COVAL-8499] isolate voice conversation failures in a batch
+  ([#7](https://github.com/coval-ai/coval-agent-sdk/pull/7),
+  [`79c2179`](https://github.com/coval-ai/coval-agent-sdk/commit/79c217986773a109e7d28750f3565efaa5da1859))
+
+### Continuous Integration
+
+- Isolate release credentials from build jobs
+  ([#5](https://github.com/coval-ai/coval-agent-sdk/pull/5),
+  [`fdb6d9e`](https://github.com/coval-ai/coval-agent-sdk/commit/fdb6d9ed1dc685baa029183232c7de234a00049c))
+
+- Validate conventional commit pr titles ([#6](https://github.com/coval-ai/coval-agent-sdk/pull/6),
+  [`24b70b3`](https://github.com/coval-ai/coval-agent-sdk/commit/24b70b3f2e145dbb6c5b3314d3d36cc94c0c59dd))
+
+
 ## v0.1.1 (2026-10-21)
 
 ### Bug Fixes
