@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.1.3 (2026-10-29)
+
+### Bug Fixes
+
+- [COVAL-8010] reject abrupt socket loss despite completed status
+  ([#8](https://github.com/coval-ai/coval-agent-sdk/pull/8),
+  [`e91e636`](https://github.com/coval-ai/coval-agent-sdk/commit/e91e63666152d7480fe90defb370623cdda2c4f5))
+
+
 ## v0.1.2 (2026-10-29)
 
 ### Bug Fixes
