@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.1.4 (2026-10-30)
+
+### Bug Fixes
+
+- [COVAL-8010] isolate failed conversation trace cleanup
+  ([#9](https://github.com/coval-ai/coval-agent-sdk/pull/9),
+  [`6a0ece9`](https://github.com/coval-ai/coval-agent-sdk/commit/6a0ece97638de3b939ea99f381d9989d39995d41))
+
+
 ## v0.1.3 (2026-10-29)
 
 ### Bug Fixes
