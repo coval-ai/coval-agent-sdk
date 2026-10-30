@@ -216,12 +216,12 @@ class CovalTraceExporter(trace_export.SpanExporter):
                 and not buffer.uploading
             ]
             for trace_id in trace_ids:
-                buffer = self._traces.pop(trace_id)
+                buffer = self._traces[trace_id]
                 self._buffered_span_count -= len(buffer.spans)
-                self._rejected_before_epoch_nanoseconds = max(
-                    self._rejected_before_epoch_nanoseconds,
-                    buffer.latest_span_epoch_nanoseconds,
-                )
+                buffer.spans.clear()
+                # Reject late spans from this trace without invalidating
+                # unrelated conversations that started before its cleanup.
+                buffer.damaged = True
 
     def upload(
         self,
