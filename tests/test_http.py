@@ -1,6 +1,7 @@
 """Exercise the real API SDK behind the private JSON boundary."""
 
 import asyncio
+import contextlib
 from http import server
 import json
 import logging
@@ -21,10 +22,15 @@ from coval_agent_sdk import _http
 from coval_agent_sdk import tracing
 
 
-@pytest.fixture
-def endpoint():
+@contextlib.contextmanager
+def api_endpoint():
     requests = []
-    reply = {"status": 200, "body": b'{"ok":true}', "drop": False}
+    reply = {
+        "status": 200,
+        "body": b'{"ok":true}',
+        "drop": False,
+        "headers": {},
+    }
 
     class Handler(server.BaseHTTPRequestHandler):
         def do_GET(self):
@@ -47,6 +53,8 @@ def endpoint():
                 return
             self.send_response(reply["status"])
             self.send_header("Content-Type", "application/json")
+            for name, value in reply["headers"].items():
+                self.send_header(name, value)
             self.end_headers()
             self.wfile.write(reply["body"])
 
@@ -62,6 +70,41 @@ def endpoint():
         http.shutdown()
         thread.join(timeout=2)
         http.server_close()
+
+
+@pytest.fixture
+def endpoint():
+    with api_endpoint() as hosted:
+        yield hosted
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("status", [301, 303, 307])
+@pytest.mark.parametrize("request_kind", ["get", "json", "protobuf"])
+async def test_redirects_never_forward_credentials_or_replay_requests(
+    endpoint, status, request_kind
+):
+    url, requests, reply = endpoint
+    with api_endpoint() as (destination, forwarded, _):
+        reply.update(status=status, headers={"Location": destination})
+        api = _http.CovalApi(api_base_url=url, api_key="synthetic-key")
+        with pytest.raises(coval_agent_sdk.CovalHttpError) as failure:
+            if request_kind == "get":
+                await api.get("simulations")
+            elif request_kind == "json":
+                await api.post("runs", {"agent_id": "agent-a"})
+            else:
+                await asyncio.to_thread(
+                    api.post_protobuf,
+                    "traces",
+                    b"synthetic-protobuf",
+                    headers={"X-Simulation-Id": "simulation-a"},
+                )
+        assert failure.value.status_code == status
+        assert len(requests) == 1
+        headers = {key.lower(): value for key, value in requests[0][2].items()}
+        assert headers["x-api-key"] == "synthetic-key"
+        assert forwarded == []
 
 
 @pytest.mark.parametrize("status", [200, 400, 503])
@@ -112,6 +155,38 @@ def test_real_trace_request_encodes_otlp_and_stays_silent(
         assert collector.upload(**options) == 1
         assert len(requests) == 2
         assert requests[1][3] == body
+    assert collector._buffered_span_count == 0
+
+
+def test_trace_upload_rejects_nonlocal_http_and_retains_spans(endpoint):
+    url, requests, _ = endpoint
+    collector = tracing.CovalTraceExporter()
+    span = sdk_trace.ReadableSpan(
+        name="conversation",
+        context=trace.SpanContext(trace_id=1, span_id=2, is_remote=False),
+        attributes={"conversation.id": "simulation-a"},
+        start_time=1,
+        end_time=2,
+    )
+    collector.export([span])
+    with mock.patch.object(_http.CovalApi, "post_protobuf") as post:
+        with pytest.raises(coval_agent_sdk.CovalTraceError, match="HTTPS"):
+            collector.upload(
+                simulation_id="simulation-a",
+                api_base_url="http://api.example.test/v1",
+                api_key="synthetic-key",
+            )
+        post.assert_not_called()
+    assert collector._buffered_span_count == 1
+    assert (
+        collector.upload(
+            simulation_id="simulation-a",
+            api_base_url=url,
+            api_key="synthetic-key",
+        )
+        == 1
+    )
+    assert len(requests) == 1
     assert collector._buffered_span_count == 0
 
 

@@ -15,7 +15,7 @@ The SDK owns the connection between a local voice or text agent and a Coval simu
 | `client.py` | Public run handler and connection context entry points. |
 | `telemetry.py` | Dependency-free trace lifecycle protocol used by the client. |
 | `tracing.py` | Optional OpenTelemetry provider flush, buffers, and upload lifecycle. |
-| `_http.py` | Private Coval API SDK adapter, JSON validation, error translation, and request resource cleanup; mutation requests are not retried. |
+| `_http.py` | Private Coval API SDK adapter, API URL and JSON validation, redirect policy, error translation, and request resource cleanup; mutation requests are not retried. |
 | `_connection.py` | Offer discovery and one-use WebSocket connection setup. |
 | `_audio.py` | Private connection state shared by the public handle/context, serialized PCM pacing, validation, and byte accounting. |
 | `_text.py` | Private text connection state, message validation and encoding, bounded input, and message counts. |
@@ -34,7 +34,7 @@ Internal code imports owning modules rather than the root public facade. The roo
 
 A new module requires an explicit dependency policy in that checker. Choose its responsibility from the behavior and state it owns; the policy is not a reason to split one operation into forwarding functions. Import conventions and size/complexity review signals live in [Python conventions](python-style.md).
 
-`coval-sdk` supplies authentication, serialization, and HTTP requests and supports Python 3.9 and newer, within this package's Python 3.10 minimum. It is MIT-licensed and installed as a dependency rather than vendored. The direct `urllib3` dependency declares the network exception types the adapter translates; it is also MIT-licensed.
+`coval-sdk` supplies authentication, serialization, and HTTP requests and supports Python 3.9 and newer, within this package's Python 3.10 minimum. It is MIT-licensed and installed as a dependency rather than vendored. The direct `urllib3` dependency supplies URL parsing, redirect/retry policy and the network exception types the adapter translates; it is also MIT-licensed.
 
 Only `_http.py` imports `coval_sdk` and `urllib3`; the architecture checker enforces this boundary. The public client owns a private `_api` adapter. Public signatures, results, attributes, and exports contain no API SDK objects or types. Request failures become agent SDK errors rather than passing dependency exceptions to applications.
 

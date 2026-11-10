@@ -33,12 +33,14 @@ class _Client:
 
         Args:
             api_key: Organization API key; never include it in diagnostics.
-            api_base_url: Coval API root including the version path.
+            api_base_url: HTTPS Coval API root including the version path.
+                HTTP is allowed only for localhost or loopback IP addresses.
             workspace_id: Workspace selector, or None for the server default.
             trace_exporter: Exporter shared with application tracing, or None.
 
         Raises:
-            ValueError: The API root does not use HTTP or HTTPS.
+            ValueError: The API root is malformed, insecure, or includes
+                user information, a query, or a fragment.
         """
         self._api = _http.CovalApi(
             api_base_url=api_base_url,

@@ -3,18 +3,67 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 from typing import Any
 from typing import cast
-from urllib import parse
 
 from coval_sdk import api_client
 from coval_sdk import configuration
 from coval_sdk import exceptions
 from urllib3 import exceptions as http_exceptions
+from urllib3 import util
 
 from coval_agent_sdk import _defaults
 from coval_agent_sdk import errors
+
+
+API_BASE_URL_REQUIREMENT = (
+    "api_base_url must be an absolute HTTPS URL. HTTP is allowed only "
+    "for localhost or loopback IP addresses."
+)
+
+
+def _is_loopback_host(hostname: str) -> bool:
+    """Check a literal local host without resolving arbitrary DNS names."""
+    if hostname == "localhost":
+        return True
+    if "%" in hostname:
+        return False
+    address = hostname.removeprefix("[").removesuffix("]")
+    try:
+        return ipaddress.ip_address(address).is_loopback
+    except ValueError:
+        return False
+
+
+def _validate_api_base_url(api_base_url: str) -> None:
+    """Reject unsafe API roots using the HTTP transport's URL parser."""
+    if "\\" in api_base_url or any(
+        character.isspace() or ord(character) < 32 or ord(character) == 127
+        for character in api_base_url
+    ):
+        raise ValueError(
+            "api_base_url must not contain whitespace, control characters, "
+            "or backslashes."
+        )
+    try:
+        parsed = util.parse_url(api_base_url)
+    except http_exceptions.LocationParseError:
+        raise ValueError(API_BASE_URL_REQUIREMENT) from None
+    hostname = parsed.host
+    if parsed.scheme not in {"http", "https"} or not hostname:
+        raise ValueError(API_BASE_URL_REQUIREMENT)
+    if parsed.auth is not None:
+        raise ValueError(
+            "api_base_url must not include username or password information."
+        )
+    if parsed.query is not None or parsed.fragment is not None:
+        raise ValueError("api_base_url must not include a query or fragment.")
+    if parsed.port == 0:
+        raise ValueError("api_base_url port must be between 1 and 65535.")
+    if parsed.scheme == "http" and not _is_loopback_host(hostname):
+        raise ValueError(API_BASE_URL_REQUIREMENT)
 
 
 class CovalApi:
@@ -30,12 +79,15 @@ class CovalApi:
         """Configure the API root and authentication headers.
 
         Args:
-            api_base_url: API root including the version path.
+            api_base_url: HTTPS API root including the version path, or a
+                loopback HTTP root for local development.
             api_key: Organization API key.
             workspace_id: Optional workspace selector.
+
+        Raises:
+            ValueError: The API root is malformed or violates URL policy.
         """
-        if parse.urlsplit(api_base_url).scheme not in {"http", "https"}:
-            raise ValueError("api_base_url must use http or https.")
+        _validate_api_base_url(api_base_url)
         self.api_base_url = api_base_url.rstrip("/")
         self.api_key = api_key
         self.workspace_id = workspace_id
@@ -131,7 +183,8 @@ class CovalApi:
         settings = configuration.Configuration(
             host=self.api_base_url,
             api_key={"Coval_Agents_API_ApiKeyAuth": self.api_key},
-            retries=0,
+            # Return redirects without forwarding credentials or mutations.
+            retries=util.Retry(total=0, redirect=0, raise_on_redirect=False),
         )
         # The generated client leaves request/response members untyped. Keep
         # that dynamic boundary here and validate JSON before returning it.
