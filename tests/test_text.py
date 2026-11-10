@@ -202,7 +202,14 @@ async def test_mismatched_modality_fails_before_the_handler_runs(
     ("frame", "message"),
     [
         (b"\x01\x00", "Relay sent audio to a text session"),
-        (json.dumps({"type": "message"}), "message without text"),
+        (
+            json.dumps({"type": "message"}),
+            "message without text",
+        ),
+        (
+            json.dumps({"type": "message", "text": "\ud800"}),
+            "valid UTF-8",
+        ),
     ],
 )
 async def test_text_protocol_violations_fail_the_conversation(
@@ -239,11 +246,20 @@ async def test_text_protocol_violations_fail_the_conversation(
         ("   ", "nonempty string"),
         (b"bytes", "nonempty string"),
         ("x" * (_defaults.MAX_TEXT_MESSAGE_BYTES + 1), "64 KiB"),
+        ("\ud800", "valid UTF-8"),
+        ("\x00" * 22_000, "relay frame"),
     ],
 )
 def test_invalid_replies_are_rejected_before_any_write(text, message):
     with pytest.raises(coval_agent_sdk.CovalError, match=message):
         _text.encode_message(text)
+
+
+def test_non_ascii_replies_serialize_as_utf8_without_escaping():
+    frame = _text.encode_message("héllo 🎉")
+    assert json.loads(frame) == {"type": "message", "text": "héllo 🎉"}
+    assert "\\u" not in frame
+    assert len(frame.encode()) <= _defaults.MAX_TEXT_FRAME_BYTES
 
 
 @pytest.mark.asyncio

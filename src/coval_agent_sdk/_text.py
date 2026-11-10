@@ -23,15 +23,29 @@ def encode_message(text: object) -> str:
         JSON text frame accepted by the relay.
 
     Raises:
-        errors.CovalError: The message is not a nonempty string within limits.
+        errors.CovalError: The message is not a nonempty string, is not
+            valid UTF-8, or exceeds the reply or relay frame limits.
     """
     if not isinstance(text, str) or not text.strip():
         raise errors.CovalError("A text message must be a nonempty string.")
-    if len(text.encode()) > _defaults.MAX_TEXT_MESSAGE_BYTES:
+    try:
+        encoded = text.encode()
+    except UnicodeEncodeError:
+        raise errors.CovalError(
+            "A text message must be valid UTF-8; it contains an unpaired "
+            "surrogate."
+        ) from None
+    if len(encoded) > _defaults.MAX_TEXT_MESSAGE_BYTES:
         raise errors.CovalError(
             "A text message exceeds the 64 KiB limit; send a shorter reply."
         )
-    return json.dumps({"type": "message", "text": text})
+    frame = json.dumps({"type": "message", "text": text}, ensure_ascii=False)
+    if len(frame.encode()) > _defaults.MAX_TEXT_FRAME_BYTES:
+        raise errors.CovalError(
+            "A text message expands past the 128 KiB relay frame limit; "
+            "send a shorter reply."
+        )
+    return frame
 
 
 class TextState:
@@ -57,6 +71,12 @@ class TextState:
         text = control.get("text")
         if not isinstance(text, str):
             raise errors.CovalError("Relay sent a message without text.")
+        try:
+            text.encode()
+        except UnicodeEncodeError:
+            raise errors.CovalError(
+                "Relay sent a message that is not valid UTF-8."
+            ) from None
         if len(self.input) >= _defaults.MAX_UNREAD_TEXT_MESSAGES:
             raise errors.CovalError(
                 "More than 64 unread messages accumulated; consume "
