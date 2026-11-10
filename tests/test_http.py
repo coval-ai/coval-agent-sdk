@@ -81,7 +81,7 @@ def endpoint():
 @pytest.mark.asyncio
 @pytest.mark.parametrize("status", [301, 303, 307])
 @pytest.mark.parametrize("request_kind", ["get", "json", "protobuf"])
-async def test_redirects_never_forward_credentials_or_replay_requests(
+async def test_redirect_responses_do_not_issue_another_request(
     endpoint, status, request_kind
 ):
     url, requests, reply = endpoint

@@ -39,8 +39,7 @@ class _Client:
             trace_exporter: Exporter shared with application tracing, or None.
 
         Raises:
-            ValueError: The API root is malformed, insecure, or includes
-                user information, a query, or a fragment.
+            ValueError: The API root does not match a supported URL format.
         """
         self._api = _http.CovalApi(
             api_base_url=api_base_url,

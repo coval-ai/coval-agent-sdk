@@ -117,7 +117,7 @@ def test_package_has_no_executable_entry_point(tmp_path):
         "https://api.example.test/v1#",
     ],
 )
-def test_clients_reject_unsafe_or_malformed_api_roots(client_type, url):
+def test_clients_reject_unsupported_api_roots(client_type, url):
     with pytest.raises(ValueError, match="api_base_url"):
         client_type(api_key="synthetic-key", api_base_url=url)
 
@@ -147,19 +147,19 @@ def test_clients_accept_https_and_explicit_loopback_http(client_type, url):
 @pytest.mark.parametrize(
     "url",
     [
-        "https://user:sensitive-credential@api.example.test/v1",
-        "http://sensitive-credential@localhost/v1",
-        "https://api.example.test/v1?token=sensitive-credential",
-        "https://api.example.test/v1#sensitive-credential",
-        "https://user:sensitive-credential@api.example.test:invalid/v1",
+        "https://user:example-value@api.example.test/v1",
+        "http://example-value@localhost/v1",
+        "https://api.example.test/v1?token=example-value",
+        "https://api.example.test/v1#example-value",
+        "https://user:example-value@api.example.test:invalid/v1",
     ],
 )
-def test_api_root_validation_does_not_echo_supplied_credentials(url):
+def test_api_root_validation_errors_omit_supplied_url_values(url):
     with pytest.raises(ValueError, match="api_base_url") as failure:
         coval_agent_sdk.CovalVoiceClient(
             api_key="synthetic-key", api_base_url=url
         )
-    assert "sensitive-credential" not in str(failure.value)
+    assert "example-value" not in str(failure.value)
     assert failure.value.__cause__ is None
 
 

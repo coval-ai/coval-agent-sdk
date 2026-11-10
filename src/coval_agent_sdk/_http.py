@@ -37,7 +37,7 @@ def _is_loopback_host(hostname: str) -> bool:
 
 
 def _validate_api_base_url(api_base_url: str) -> None:
-    """Reject unsafe API roots using the HTTP transport's URL parser."""
+    """Validate API roots using the HTTP transport's URL parser."""
     if "\\" in api_base_url or any(
         character.isspace() or ord(character) < 32 or ord(character) == 127
         for character in api_base_url
@@ -182,7 +182,7 @@ class CovalApi:
         settings = configuration.Configuration(
             host=self.api_base_url,
             api_key={"Coval_Agents_API_ApiKeyAuth": self.api_key},
-            # Return redirects without forwarding credentials or mutations.
+            # Return redirect responses without issuing another request.
             retries=util.Retry(total=0, redirect=0, raise_on_redirect=False),
         )
         # The generated client leaves request/response members untyped. Keep
