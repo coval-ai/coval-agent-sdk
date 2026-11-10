@@ -17,7 +17,6 @@ from urllib3 import util
 from coval_agent_sdk import _defaults
 from coval_agent_sdk import errors
 
-
 API_BASE_URL_REQUIREMENT = (
     "api_base_url must be an absolute HTTPS URL. HTTP is allowed only "
     "for localhost or loopback IP addresses."

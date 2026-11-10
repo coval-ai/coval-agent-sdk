@@ -88,18 +88,19 @@ async def test_redirects_never_forward_credentials_or_replay_requests(
     with api_endpoint() as (destination, forwarded, _):
         reply.update(status=status, headers={"Location": destination})
         api = _http.CovalApi(api_base_url=url, api_key="synthetic-key")
+        if request_kind == "get":
+            operation = api.get("simulations")
+        elif request_kind == "json":
+            operation = api.post("runs", {"agent_id": "agent-a"})
+        else:
+            operation = asyncio.to_thread(
+                api.post_protobuf,
+                "traces",
+                b"synthetic-protobuf",
+                headers={"X-Simulation-Id": "simulation-a"},
+            )
         with pytest.raises(coval_agent_sdk.CovalHttpError) as failure:
-            if request_kind == "get":
-                await api.get("simulations")
-            elif request_kind == "json":
-                await api.post("runs", {"agent_id": "agent-a"})
-            else:
-                await asyncio.to_thread(
-                    api.post_protobuf,
-                    "traces",
-                    b"synthetic-protobuf",
-                    headers={"X-Simulation-Id": "simulation-a"},
-                )
+            await operation
         assert failure.value.status_code == status
         assert len(requests) == 1
         headers = {key.lower(): value for key, value in requests[0][2].items()}
