@@ -121,6 +121,42 @@ class CovalVoiceClient(_Client):
             self.trace_exporter,
         )
 
+    async def attach(
+        self,
+        run_id: str,
+        on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
+        *,
+        run_timeout_seconds: float = _defaults.RUN_WAIT_SECONDS,
+    ) -> results.RunResult:
+        """Serve every conversation of a run your application launched.
+
+        Use this when you create the run through the Coval API yourself, for
+        example to select metrics, test cases or metadata. Monitoring, session
+        isolation and failure reporting match run(); no run is created.
+
+        Args:
+            run_id: Identifier of an existing run whose agent uses the SDK.
+            on_connection: Async function accepting one AudioConnection.
+            run_timeout_seconds: Positive finite deadline for the whole run,
+                including queued conversations and evaluation.
+
+        Returns:
+            Hosted run identity, completion status, and conversation outcomes.
+
+        Raises:
+            ValueError: run_id is empty or the deadline is invalid.
+            errors.RunError: The run fails, retaining partial outcomes.
+            Exception: Application errors and cancellation propagate unchanged.
+        """
+        return await _runs.attach_run(
+            self._api,
+            run_id,
+            run_timeout_seconds,
+            audio.AudioConnection,
+            on_connection,
+            self.trace_exporter,
+        )
+
 
 class CovalTextClient(_Client):
     """Connect existing text agents to Coval's simulated users.
@@ -189,6 +225,42 @@ class CovalTextClient(_Client):
         return await _runs.launch_and_run(
             self._api,
             config,
+            text.TextConnection,
+            on_connection,
+            self.trace_exporter,
+        )
+
+    async def attach(
+        self,
+        run_id: str,
+        on_connection: Callable[[text.TextConnection], Awaitable[None]],
+        *,
+        run_timeout_seconds: float = _defaults.RUN_WAIT_SECONDS,
+    ) -> results.RunResult:
+        """Serve every conversation of a run your application launched.
+
+        Use this when you create the run through the Coval API yourself, for
+        example to select metrics, test cases or metadata. Monitoring, session
+        isolation and failure reporting match run(); no run is created.
+
+        Args:
+            run_id: Identifier of an existing run whose agent uses the SDK.
+            on_connection: Async function accepting one TextConnection.
+            run_timeout_seconds: Positive finite deadline for the whole run,
+                including queued conversations and evaluation.
+
+        Returns:
+            Hosted run identity, completion status, and conversation outcomes.
+
+        Raises:
+            ValueError: run_id is empty or the deadline is invalid.
+            errors.RunError: The run fails, retaining partial outcomes.
+            Exception: Application errors and cancellation propagate unchanged.
+        """
+        return await _runs.attach_run(
+            self._api,
+            run_id,
+            run_timeout_seconds,
             text.TextConnection,
             on_connection,
             self.trace_exporter,

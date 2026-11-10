@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+from unittest import mock
 
 import pytest
 from websockets.asyncio import server as websocket_server
@@ -52,7 +53,7 @@ async def _serve(relay, serving, state):
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("entry", ["connect", "run"])
+@pytest.mark.parametrize("entry", ["connect", "run", "attach"])
 async def test_text_client_exchanges_turns_until_session_end(
     monkeypatch, api_endpoint, tls_contexts, caplog, capsys, entry
 ):
@@ -79,16 +80,21 @@ async def test_text_client_exchanges_turns_until_session_end(
     hosted = await _serve(relay, serving, state)
     try:
         client = _client(url)
-        if entry == "run":
-            result = await asyncio.wait_for(
+        if entry in {"run", "attach"}:
+            serving_run = (
                 client.run(
                     coval_agent_sdk.RunConfig(
                         "agent", "persona", "set", concurrency=2
                     ),
                     on_connection=application,
-                ),
-                5,
+                )
+                if entry == "run"
+                else client.attach(
+                    "run-wire", application, run_timeout_seconds=4
+                )
             )
+            result = await asyncio.wait_for(serving_run, 5)
+            assert result.run_id == "run-wire"
             expected_ids = IDS
             conversations = result.conversations
             assert result.status == "COMPLETED"
@@ -118,8 +124,29 @@ async def test_text_client_exchanges_turns_until_session_end(
         ]
         for name in expected_ids
     }
+    launches = [r for r in state["requests"] if r[0] == "POST"]
+    assert len(launches) == (1 if entry == "run" else 0)
     assert capsys.readouterr() == ("", "")
     assert caplog.records == []
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("run_id", "timeout", "message"),
+    [
+        ("", 10, "run_id"),
+        ("run", 0, "positive"),
+        ("run", float("nan"), "positive"),
+    ],
+)
+async def test_attach_validates_arguments_before_any_request(
+    run_id, timeout, message
+):
+    client = coval_agent_sdk.CovalTextClient(api_key="synthetic-key")
+    with pytest.raises(ValueError, match=message):
+        await client.attach(
+            run_id, mock.AsyncMock(), run_timeout_seconds=timeout
+        )
 
 
 @pytest.mark.asyncio

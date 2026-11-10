@@ -6,7 +6,7 @@ Integrate an existing voice pipeline through `AudioConnection`, or a text agent 
 
 Install the SDK, select an environment/workspace and existing Coval fixtures, then call `await client.run(config, on_connection=handle_connection)`. The async handler receives one ready `AudioConnection`, connects it to the application's pipeline, stays active through voice completion, and releases application resources before returning. Handlers may run concurrently, each with its own simulation ID and audio connection; isolate their state in your application.
 
-For an existing simulation, use `async with client.connect(simulation_id) as connection`. The same pipeline integration works inside this context. Read `connection.result` after successful context exit. No run is created. Early normal exit is a failure, and context cleanup does not imply hosted cancellation.
+For a run your application launched through the Coval API, call `await client.attach(run_id, on_connection, run_timeout_seconds=...)`; it creates no run and otherwise behaves like `run()`. `attach()` raises `ValueError` for an empty run ID or a deadline that is not positive and finite. For an existing simulation, use `async with client.connect(simulation_id) as connection`. The same pipeline integration works inside this context. Read `connection.result` after successful context exit. No run is created. Early normal exit is a failure, and context cleanup does not imply hosted cancellation.
 
 ## Audio interface
 

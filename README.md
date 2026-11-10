@@ -97,6 +97,16 @@ async def attach(
 
 Read `connection.result` after the context exits successfully. Leaving before voice completion raises an error. Local timeout or cancellation stops local work without cancelling the hosted run.
 
+## Serve a run you launched
+
+When you create the run through the Coval API yourself, for example to choose metrics, test cases or run metadata that `RunConfig` does not cover, pass its ID to `attach()` instead of calling `run()`:
+
+```python
+result = await client.attach(run_id, on_connection, run_timeout_seconds=900)
+```
+
+`attach()` creates no run; it discovers and serves the run's conversations with the same monitoring, session isolation and results as `run()`. Both clients provide it.
+
 ## Results and errors
 
 `RunResult` contains the run ID, hosted status, completed `conversations`, and SDK session `failures`. Each `ConversationFailure` retains the simulation ID, exception type and diagnostic message. Each `ConversationResult` includes its simulation ID, audio byte counts, and optional trace delivery result. Execution completion does not mean the agent passed its evaluation criteria.
