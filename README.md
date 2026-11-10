@@ -1,6 +1,6 @@
 # Coval Agent SDK
 
-Connect your Python voice pipeline to Coval's simulated callers. Your application runs the agent; Coval records and evaluates the conversation. The SDK uses an outbound WebSocket, so your agent does not need a public endpoint.
+Connect your Python voice pipeline or text agent to Coval's simulated users. Your application runs the agent; Coval records and evaluates the conversation. The SDK uses an outbound WebSocket, so your agent does not need a public endpoint.
 
 Requires **Python 3.10 or newer**.
 
@@ -55,6 +55,33 @@ if __name__ == "__main__":
 
 The client defaults to `https://api.coval.dev/v1`. Set `api_base_url` to use another API root. Audio is PCM16 little-endian, mono, 16 kHz; see the [audio guide](https://docs.coval.ai/sdks/agent-sdk#audio-format-and-limits) for format and buffering requirements.
 
+## Run a text conversation
+
+Text agents use `CovalTextClient` with an agent whose type is `MODEL_TYPE_SDK_CHAT`. Each simulated-user message is one turn; reply to it with one complete `send_message()` call. The handler below echoes each message:
+
+```python
+async def on_text_connection(
+    connection: coval_agent_sdk.TextConnection,
+) -> None:
+    async for message in connection.receive_messages():
+        await connection.send_message(f"You said: {message}")
+
+
+async def run_text() -> coval_agent_sdk.RunResult:
+    client = coval_agent_sdk.CovalTextClient(
+        api_key=os.environ["COVAL_API_KEY"],
+        workspace_id=os.environ["COVAL_WORKSPACE_ID"],
+    )
+    config = coval_agent_sdk.RunConfig(
+        agent_id=os.environ["COVAL_AGENT_ID"],
+        persona_id=os.environ["COVAL_PERSONA_ID"],
+        test_set_id=os.environ["COVAL_TEST_SET_ID"],
+    )
+    return await client.run(config, on_connection=on_text_connection)
+```
+
+`receive_messages()` ends when the simulated user finishes. When the persona's conversation initiator is the agent, send your greeting with `send_message()` before reading. `client.connect(simulation_id)` attaches a text agent to one existing simulation, as for voice. Connecting the wrong client type fails before your handler runs. Text results report message counts in `received_messages` and `sent_messages`.
+
 ## Connect to an existing simulation
 
 `connect()` attaches to one simulation without creating a run:
@@ -69,6 +96,16 @@ async def attach(
 ```
 
 Read `connection.result` after the context exits successfully. Leaving before voice completion raises an error. Local timeout or cancellation stops local work without cancelling the hosted run.
+
+## Serve a run you launched
+
+When you create the run through the Coval API yourself, for example to choose metrics, test cases or run metadata that `RunConfig` does not cover, pass its ID to `attach()` instead of calling `run()`:
+
+```python
+result = await client.attach(run_id, on_connection, run_timeout_seconds=900)
+```
+
+`attach()` creates no run; it discovers and serves the run's conversations with the same monitoring, session isolation and results as `run()`. Both clients provide it.
 
 ## Results and errors
 

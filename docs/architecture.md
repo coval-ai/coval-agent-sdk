@@ -1,6 +1,6 @@
 # Architecture
 
-The SDK owns the connection between a local voice agent and a Coval simulation. It owns authentication, connection discovery, audio transport, pacing, run monitoring, and terminal cleanup. The application owns its agent framework, provider clients, state isolation, pipeline queues, and background tasks.
+The SDK owns the connection between a local voice or text agent and a Coval simulation. It owns authentication, connection discovery, audio or text transport, pacing, run monitoring, and terminal cleanup. The application owns its agent framework, provider clients, state isolation, pipeline queues, and background tasks.
 
 ## Module ownership
 
@@ -8,6 +8,7 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 | --- | --- |
 | `src/coval_agent_sdk/__init__.py` | The explicit supported public API and its `__all__`. |
 | `audio.py` | Public per-conversation audio connection, bounded input, and observable completion. |
+| `text.py` | Public per-conversation text connection, bounded input, and serialized replies. |
 | `results.py` | Immutable run, conversation, and trace outcomes. |
 | `config.py` | Immutable run configuration and its validation. |
 | `errors.py` | API and relay errors, including partial run outcomes exposed to callers. |
@@ -17,6 +18,7 @@ The SDK owns the connection between a local voice agent and a Coval simulation. 
 | `_http.py` | Private Coval API SDK adapter, JSON validation, error translation, and request resource cleanup; mutation requests are not retried. |
 | `_connection.py` | Offer discovery and one-use WebSocket connection setup. |
 | `_audio.py` | Private connection state shared by the public handle/context, serialized PCM pacing, validation, and byte accounting. |
+| `_text.py` | Private text connection state, message validation and encoding, bounded input, and message counts. |
 | `_session.py` | Connection context, relay reader, readiness, input acknowledgements, handler observation, and trace cleanup. |
 | `_runs.py` | Run launch, paginated conversation discovery, monitoring, and sibling cancellation. |
 | `_defaults.py` | Internal protocol limits and timeout defaults. |

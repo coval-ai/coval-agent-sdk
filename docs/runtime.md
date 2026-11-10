@@ -6,7 +6,7 @@ These contracts describe the implemented client. They are the boundaries an adap
 
 `CovalVoiceClient.connect(simulation_id)` yields a ready `AudioConnection` through an async context manager. `run(config, on_connection)` launches a hosted run and invokes an async application handler for each eligible ready connection. The SDK has no agent classes or factories and does not construct or close an application's pipeline. A hosted agent fixture ID remains part of run configuration.
 
-The SDK receives relay frames in its own task, independently of application processing. Each connection requires one validated `session_ready` before input, output, or normal completion. Applications consume `receive_audio()` and await `send_audio()` independently. `wait_closed()` observes voice completion without consuming input. The application owns state isolation, provider/pipeline tasks and their cleanup; stop them and end conversation spans before leaving the context or returning from the run handler.
+The SDK receives relay frames in its own task, independently of application processing. Each connection requires one validated `session_ready` before input, output, or normal completion. Voice applications consume `receive_audio()` and await `send_audio()` independently; text applications use `receive_messages()` and `send_message()`. `wait_closed()` observes voice completion without consuming input. The application owns state isolation, provider/pipeline tasks and their cleanup; stop them and end conversation spans before leaving the context or returning from the run handler.
 
 A handler returning or a context exiting before voice completion fails visibly. A failed transport cancels and awaits a run handler so its finally blocks execute. Normal completion wakes receive iterators and pending sends; handlers may then finish their application cleanup. A direct context does not cancel the caller's task: connection reads/writes/wait_closed surface failure, and context exit checks the outcome even if the application ignored it. A handler must observe the connection and remain bounded by application policy or the run deadline.
 
@@ -21,6 +21,12 @@ Each send accepts at most 2 MiB and must be awaited; the SDK does not buffer an 
 Unread input is bounded to 64 KiB across queued chunks. Input is acknowledged after validation and bounded enqueueing; overflowing the local budget fails the session instead of dropping audio or blocking terminal control frames. The hosted relay also limits unacknowledged input to 64 KiB. An overload close remains a failure. Normal completion drains queued input; failures wake receivers immediately rather than appearing as end-of-stream.
 
 The SDK does not implement relay clear/barge-in controls. Concurrent input and output do not establish interruption support.
+
+## Text sessions
+
+A text session uses the same discovery, relay, deadlines, run monitoring, completion confirmation and trace lifecycle as a voice session. The relay announces it with `session_ready` carrying `"modality": "text"` and no audio format. The SDK rejects a readiness frame whose modality does not match the client, before yielding a connection.
+
+Each simulated-user turn arrives as one `{"type":"message","text":...}` frame and each `send_message()` writes one such frame. There is no audio, pacing or acknowledgement. Replies must be nonempty strings of at most 64 KiB UTF-8 and are validated before any write. Unread input is bounded to 64 messages; overflowing it fails the session. A binary frame, a message without text, or a message before readiness fails the session. `send_message()` returns False when normal completion happened first and never replays a message. Text agents cannot end a conversation themselves; the simulated user, script or deadline ends it with `session_end`.
 
 ## Discovery and connection
 

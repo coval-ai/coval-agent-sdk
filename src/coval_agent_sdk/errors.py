@@ -1,4 +1,4 @@
-"""Exceptions raised by the Coval voice API and relay."""
+"""Exceptions raised by the Coval API and relay."""
 
 from __future__ import annotations
 

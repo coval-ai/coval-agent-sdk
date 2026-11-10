@@ -68,7 +68,7 @@ class Socket:
 def setup_connection(monkeypatch, socket, **kwargs):
     monkeypatch.setattr(
         _connection,
-        "open_voice_connection",
+        "open_relay_connection",
         mock.AsyncMock(return_value=socket),
     )
     return coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key", **kwargs)
@@ -94,7 +94,7 @@ async def test_real_websocket_greeting_input_ack_reply_and_final_result(
         async def open_local(api, simulation_id):
             return await websocket_client.connect(f"ws://127.0.0.1:{port}")
 
-        monkeypatch.setattr(_connection, "open_voice_connection", open_local)
+        monkeypatch.setattr(_connection, "open_relay_connection", open_local)
         voice = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
         async with voice.connect("conversation-a") as connection:
             assert connection.simulation_id == "conversation-a"

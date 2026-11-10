@@ -95,7 +95,7 @@ class BaseInstallationTest(unittest.IsolatedAsyncioTestCase):
 
         output, errors = io.StringIO(), io.StringIO()
         with (
-            mock.patch.object(_connection, "open_voice_connection", connect),
+            mock.patch.object(_connection, "open_relay_connection", connect),
             mock.patch.object(
                 client._api,
                 "post",

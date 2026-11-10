@@ -1,4 +1,4 @@
-"""Immutable outcomes returned by the voice simulation client."""
+"""Immutable outcomes returned by the voice and text simulation clients."""
 
 from __future__ import annotations
 
@@ -8,7 +8,7 @@ from typing import Literal
 
 @dataclasses.dataclass(frozen=True)
 class TraceResult:
-    """Describe optional telemetry delivery independently of voice completion.
+    """Describe optional telemetry delivery independently of completion.
 
     Attributes:
         uploaded_spans: Number of spans delivered by a successful upload, or
@@ -23,23 +23,29 @@ class TraceResult:
 
 @dataclasses.dataclass(frozen=True)
 class ConversationResult:
-    """Describe one completed local voice session after resource cleanup.
+    """Describe one completed local session after resource cleanup.
 
-    Completion describes voice transport, not hosted evaluation or quality.
+    Completion describes transport, not hosted evaluation or quality. Voice
+    sessions count audio bytes; text sessions count messages and report zero
+    audio bytes.
 
     Attributes:
         simulation_id: Identifier of the hosted conversation.
         received_audio_bytes: PCM bytes received from the simulated caller.
         sent_audio_bytes: PCM bytes sent by the local agent.
         trace: Telemetry delivery outcome, or None when tracing is disabled.
-        status: Local voice-session outcome. Failures raise instead of
-            returning a result.
+        received_messages: Text messages received from the simulated user.
+        sent_messages: Text replies sent by the local agent.
+        status: Local session outcome. Failures raise instead of returning a
+            result.
     """
 
     simulation_id: str
     received_audio_bytes: int
     sent_audio_bytes: int
     trace: TraceResult | None = None
+    received_messages: int = 0
+    sent_messages: int = 0
     status: Literal["COMPLETED"] = dataclasses.field(
         default="COMPLETED", init=False
     )
@@ -62,7 +68,7 @@ class ConversationFailure:
 
 @dataclasses.dataclass(frozen=True)
 class RunResult:
-    """Describe a hosted run and locally completed voice conversations.
+    """Describe a hosted run and locally completed conversations.
 
     A successful return requires COMPLETED. A RunError carries a snapshot whose
     status is the last observed hosted status, not a local cancellation claim.

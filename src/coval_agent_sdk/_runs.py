@@ -6,6 +6,7 @@ import asyncio
 from collections.abc import Awaitable
 from collections.abc import Callable
 import dataclasses
+import math
 import time
 from typing import Any
 from urllib import parse
@@ -13,7 +14,6 @@ from urllib import parse
 from coval_agent_sdk import _defaults
 from coval_agent_sdk import _http
 from coval_agent_sdk import _session
-from coval_agent_sdk import audio
 from coval_agent_sdk import config as run_config
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
@@ -86,16 +86,75 @@ class _RunState:
 async def launch_and_run(
     api: _http.CovalApi,
     config: run_config.RunConfig,
-    on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
+    new_connection: Callable[[str], _session.ConnectionT],
+    on_connection: Callable[[_session.ConnectionT], Awaitable[None]],
     trace_exporter: telemetry.TraceExporter | None = None,
 ) -> results.RunResult:
     """Launch once and retain completed outcomes through run failures."""
+
+    async def launch() -> str:
+        return await _launch(api, config)
+
+    return await _serve(
+        api,
+        launch,
+        config.run_timeout_seconds,
+        new_connection,
+        on_connection,
+        trace_exporter,
+    )
+
+
+async def attach_run(
+    api: _http.CovalApi,
+    run_id: str,
+    run_timeout_seconds: float,
+    new_connection: Callable[[str], _session.ConnectionT],
+    on_connection: Callable[[_session.ConnectionT], Awaitable[None]],
+    trace_exporter: telemetry.TraceExporter | None = None,
+) -> results.RunResult:
+    """Serve an already-launched run with the same monitoring as a launch."""
+    if not run_id:
+        raise ValueError("attach() requires a run_id.")
+    if not math.isfinite(run_timeout_seconds) or run_timeout_seconds <= 0:
+        raise ValueError("run_timeout_seconds must be positive and finite.")
+
+    async def existing() -> str:
+        return run_id
+
+    return await _serve(
+        api,
+        existing,
+        run_timeout_seconds,
+        new_connection,
+        on_connection,
+        trace_exporter,
+    )
+
+
+async def _serve(
+    api: _http.CovalApi,
+    start: Callable[[], Awaitable[str]],
+    run_timeout_seconds: float,
+    new_connection: Callable[[str], _session.ConnectionT],
+    on_connection: Callable[[_session.ConnectionT], Awaitable[None]],
+    trace_exporter: telemetry.TraceExporter | None,
+) -> results.RunResult:
+    """Monitor one run and retain completed outcomes through run failures."""
     active: dict[str, asyncio.Task[results.ConversationResult]] = {}
     state = _RunState()
     try:
         try:
-            return await _launch_and_run(
-                api, config, on_connection, trace_exporter, active, state
+            state.run_id = await start()
+            return await _monitor(
+                api,
+                state.run_id,
+                run_timeout_seconds,
+                new_connection,
+                on_connection,
+                trace_exporter,
+                active,
+                state,
             )
         finally:
             unfinished = [task for task in active.values() if not task.done()]
@@ -162,15 +221,8 @@ def _raise_fatal_session_errors(
         task.result()
 
 
-async def _launch_and_run(
-    api: _http.CovalApi,
-    config: run_config.RunConfig,
-    on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
-    trace_exporter: telemetry.TraceExporter | None,
-    active: dict[str, asyncio.Task[results.ConversationResult]],
-    state: _RunState,
-) -> results.RunResult:
-    """Monitor the launched run while the caller owns task cleanup."""
+async def _launch(api: _http.CovalApi, config: run_config.RunConfig) -> str:
+    """Create the run once; run creation is never retried."""
     launch_payload: dict[str, Any] = {
         "agent_id": config.agent_id,
         "persona_id": config.persona_id,
@@ -187,13 +239,33 @@ async def _launch_and_run(
     run_id = launch_run.get("run_id")
     if not isinstance(run_id, str) or not run_id:
         raise errors.CovalError("POST /runs returned no run.run_id.")
-    state.run_id = run_id
+    return run_id
+
+
+async def _monitor(
+    api: _http.CovalApi,
+    run_id: str,
+    run_timeout_seconds: float,
+    new_connection: Callable[[str], _session.ConnectionT],
+    on_connection: Callable[[_session.ConnectionT], Awaitable[None]],
+    trace_exporter: telemetry.TraceExporter | None,
+    active: dict[str, asyncio.Task[results.ConversationResult]],
+    state: _RunState,
+) -> results.RunResult:
+    """Monitor the run while the caller owns task cleanup."""
     seen: set[str] = set()
-    deadline = time.monotonic() + config.run_timeout_seconds
+    deadline = time.monotonic() + run_timeout_seconds
     run_status = "PENDING"
     while time.monotonic() < deadline:
         await _attach_simulations(
-            api, run_id, deadline, on_connection, trace_exporter, seen, active
+            api,
+            run_id,
+            deadline,
+            new_connection,
+            on_connection,
+            trace_exporter,
+            seen,
+            active,
         )
         _raise_fatal_session_errors(active)
         run_response = await _get_monitoring_resource(
@@ -217,12 +289,12 @@ async def _launch_and_run(
     if time.monotonic() >= deadline:
         raise errors.CovalError(
             f"Run {run_id} did not finish within "
-            f"{config.run_timeout_seconds:g} "
+            f"{run_timeout_seconds:g} "
             f"seconds."
         )
     if not active:
         raise errors.CovalError(
-            f"Run {run_id} finished without a voice session to attach."
+            f"Run {run_id} finished without a session to attach."
         )
     if len(active) != len(seen):
         raise errors.CovalError(
@@ -248,7 +320,8 @@ async def _attach_simulations(
     api: _http.CovalApi,
     run_id: str,
     deadline: float,
-    on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
+    new_connection: Callable[[str], _session.ConnectionT],
+    on_connection: Callable[[_session.ConnectionT], Awaitable[None]],
     trace_exporter: telemetry.TraceExporter | None,
     seen: set[str],
     active: dict[str, asyncio.Task[results.ConversationResult]],
@@ -279,7 +352,10 @@ async def _attach_simulations(
                 continue
             active[simulation_id] = asyncio.create_task(
                 _session.run_session(
-                    api, simulation_id, on_connection, trace_exporter
+                    api,
+                    new_connection(simulation_id),
+                    on_connection,
+                    trace_exporter,
                 )
             )
         page_token = listing.get("next_page_token")

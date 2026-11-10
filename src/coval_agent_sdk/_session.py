@@ -11,38 +11,46 @@ import json
 import time
 from typing import Any
 from typing import cast
+from typing import TypeVar
 from urllib import parse
 
 from websockets import exceptions
+from websockets.asyncio import client
 
+from coval_agent_sdk import _audio
 from coval_agent_sdk import _connection
 from coval_agent_sdk import _defaults
 from coval_agent_sdk import _exceptions
 from coval_agent_sdk import _http
+from coval_agent_sdk import _text
 from coval_agent_sdk import audio
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
 from coval_agent_sdk import telemetry
+from coval_agent_sdk import text
+
+Connection = audio.AudioConnection | text.TextConnection
+ConnectionT = TypeVar("ConnectionT", audio.AudioConnection, text.TextConnection)
 
 
 @contextlib.asynccontextmanager
 async def open_session(
     api: _http.CovalApi,
-    simulation_id: str,
+    connection: ConnectionT,
     trace_exporter: telemetry.TraceExporter | None = None,
-) -> AsyncGenerator[audio.AudioConnection, None]:
+) -> AsyncGenerator[ConnectionT, None]:
     """Yield a ready connection and finalize it after application cleanup."""
-    session = _Session(api, simulation_id, trace_exporter)
+    session = _Session(api, connection, trace_exporter)
     primary_error: BaseException | None = None
     try:
         await session.start()
-        yield session.connection
+        yield connection
         if session.state.error is not None:
             raise session.state.error
         if not session.state.completed:
             raise errors.CovalError(
-                f"Simulation {simulation_id} audio context exited "
-                "before the conversation completed."
+                f"Simulation {connection.simulation_id} {session.modality} "
+                "context exited before the conversation completed."
             )
     except BaseException as exception:
         primary_error = exception
@@ -53,12 +61,12 @@ async def open_session(
 
 async def run_session(
     api: _http.CovalApi,
-    simulation_id: str,
-    on_connection: Callable[[audio.AudioConnection], Awaitable[None]],
+    connection: ConnectionT,
+    on_connection: Callable[[ConnectionT], Awaitable[None]],
     trace_exporter: telemetry.TraceExporter | None = None,
 ) -> results.ConversationResult:
     """Run an application handler while observing transport failures."""
-    async with open_session(api, simulation_id, trace_exporter) as connection:
+    async with open_session(api, connection, trace_exporter):
         handling = asyncio.ensure_future(on_connection(connection))
         closing = asyncio.create_task(connection.wait_closed())
         try:
@@ -74,7 +82,7 @@ async def run_session(
                     task.cancel()
             await asyncio.gather(handling, closing, return_exceptions=True)
     if connection.result is None:
-        raise errors.CovalError("The audio connection has no completed result.")
+        raise errors.CovalError("The connection has no completed result.")
     return connection.result
 
 
@@ -84,14 +92,15 @@ class _Session:
     def __init__(
         self,
         api: _http.CovalApi,
-        simulation_id: str,
+        connection: Connection,
         trace_exporter: telemetry.TraceExporter | None,
     ) -> None:
         self._api = api
-        self.connection = audio.AudioConnection(simulation_id)
+        self.connection = connection
         # The context and public handle share private transport state.
-        self.state = (
-            self.connection._state  # pyright: ignore[reportPrivateUsage]
+        self.state: _audio.ConnectionState | _text.TextState = connection._state  # pyright: ignore[reportPrivateUsage]
+        self.modality = (
+            "text" if isinstance(self.state, _text.TextState) else "audio"
         )
         self._trace_exporter = trace_exporter
         self._reader: asyncio.Task[None] | None = None
@@ -141,9 +150,9 @@ class _Session:
             self.state.finish(failure)
 
     async def _exchange(self) -> None:
-        """Open one outbound socket and validate incoming control/audio."""
+        """Open one outbound socket and validate incoming frames."""
         connection = self.connection
-        websocket = await _connection.open_voice_connection(
+        websocket = await _connection.open_relay_connection(
             self._api, connection.simulation_id
         )
         async with websocket:
@@ -161,7 +170,7 @@ class _Session:
                         )
                 except asyncio.TimeoutError as exception:
                     raise errors.CovalError(
-                        "Voice relay did not send session_ready within "
+                        "Relay did not send session_ready within "
                         f"{_defaults.CONNECT_WAIT_SECONDS} seconds."
                     ) from exception
                 except StopAsyncIteration:
@@ -171,29 +180,31 @@ class _Session:
                     if self.state.completed:
                         return
                 else:
-                    if not self.state.ready.is_set():
-                        raise errors.CovalError(
-                            "Audio arrived before session_ready."
-                        )
-                    if len(message) % _defaults.VOICE_SAMPLE_WIDTH_BYTES:
-                        raise errors.CovalError(
-                            "Incoming PCM16 requires even bytes."
-                        )
-                    self.state.feed_audio(message)
-                    await websocket.send(
-                        json.dumps(
-                            {
-                                "type": "audio_ack",
-                                "received_bytes": self.state.received_bytes,
-                            }
-                        )
-                    )
+                    await self._receive_audio(websocket, message)
         if self.state.ready.is_set() and await _confirm_completed_after_close(
             self._api, connection.simulation_id
         ):
             self.state.completed = True
             return
-        raise errors.CovalError("Voice relay closed before session_end.")
+        raise errors.CovalError("Relay closed before session_end.")
+
+    async def _receive_audio(
+        self, websocket: client.ClientConnection, message: bytes
+    ) -> None:
+        """Buffer and acknowledge PCM for a voice session."""
+        state = self.state
+        if not isinstance(state, _audio.ConnectionState):
+            raise errors.CovalError("Relay sent audio to a text session.")
+        if not state.ready.is_set():
+            raise errors.CovalError("Audio arrived before session_ready.")
+        if len(message) % _defaults.VOICE_SAMPLE_WIDTH_BYTES:
+            raise errors.CovalError("Incoming PCM16 requires even bytes.")
+        state.feed_audio(message)
+        await websocket.send(
+            json.dumps(
+                {"type": "audio_ack", "received_bytes": state.received_bytes}
+            )
+        )
 
     def _control(self, message: str) -> None:
         """Require one valid readiness frame before successful completion."""
@@ -210,15 +221,18 @@ class _Session:
         if message_type == "session_ready":
             if self.state.ready.is_set():
                 raise errors.CovalError("Relay repeated session_ready.")
-            if control.get("audio") != {
-                "encoding": "pcm_s16le",
-                "sample_rate_hz": _defaults.VOICE_SAMPLE_RATE_HZ,
-                "channels": _defaults.VOICE_CHANNEL_COUNT,
-            }:
-                raise errors.CovalError(
-                    "Relay requires an unsupported audio format."
-                )
+            self._accept_modality(control)
             self.state.ready.set()
+        elif message_type == "message":
+            if not isinstance(self.state, _text.TextState):
+                raise errors.CovalError(
+                    "Relay sent a text message to a voice session."
+                )
+            if not self.state.ready.is_set():
+                raise errors.CovalError(
+                    "A message arrived before session_ready."
+                )
+            self.state.feed_message(control)
         elif message_type == "session_end":
             if not self.state.ready.is_set():
                 raise errors.CovalError("Relay ended before session_ready.")
@@ -226,6 +240,29 @@ class _Session:
             self.state.finish()
         elif message_type == "error":
             raise errors.CovalError(f"Relay error: {control.get('message')}")
+
+    def _accept_modality(self, control: dict[str, Any]) -> None:
+        """Require the simulation's agent modality to match this client."""
+        text_session = control.get("modality") == "text"
+        if isinstance(self.state, _text.TextState):
+            if not text_session:
+                raise errors.CovalError(
+                    f"Simulation {self.connection.simulation_id} uses a voice "
+                    "agent; connect with CovalVoiceClient."
+                )
+        elif text_session:
+            raise errors.CovalError(
+                f"Simulation {self.connection.simulation_id} uses a text "
+                "agent; connect with CovalTextClient."
+            )
+        elif control.get("audio") != {
+            "encoding": "pcm_s16le",
+            "sample_rate_hz": _defaults.VOICE_SAMPLE_RATE_HZ,
+            "channels": _defaults.VOICE_CHANNEL_COUNT,
+        }:
+            raise errors.CovalError(
+                "Relay requires an unsupported audio format."
+            )
 
     async def close(self, primary_error: BaseException | None) -> None:
         """Release transport and traces while preserving application errors."""
@@ -248,12 +285,28 @@ class _Session:
         if transport_error is not None:
             raise transport_error
         if successful:
-            self.state.result = results.ConversationResult(
-                simulation_id=self.connection.simulation_id,
-                received_audio_bytes=self.state.received_bytes,
-                sent_audio_bytes=self.state.writer.sent_bytes,
-                trace=trace_result,
+            self.state.result = self._result(trace_result)
+
+    def _result(
+        self, trace: results.TraceResult | None
+    ) -> results.ConversationResult:
+        """Describe the completed session in its modality's units."""
+        state = self.state
+        if isinstance(state, _text.TextState):
+            return results.ConversationResult(
+                simulation_id=state.simulation_id,
+                received_audio_bytes=0,
+                sent_audio_bytes=0,
+                trace=trace,
+                received_messages=state.received_messages,
+                sent_messages=state.sent_messages,
             )
+        return results.ConversationResult(
+            simulation_id=state.simulation_id,
+            received_audio_bytes=state.received_bytes,
+            sent_audio_bytes=state.writer.sent_bytes,
+            trace=trace,
+        )
 
     async def _finalize_trace(
         self, successful: bool, primary_error: BaseException | None

@@ -114,7 +114,7 @@ async def test_1013_keeps_current_and_later_queued_sessions_alive(
     launch = mock.AsyncMock(return_value={"run": {"run_id": "run-batch"}})
     monkeypatch.setattr(client._api, "post", launch)
     monkeypatch.setattr(client._api, "get", read)
-    monkeypatch.setattr(_connection, "open_voice_connection", connect)
+    monkeypatch.setattr(_connection, "open_relay_connection", connect)
     monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
     with pytest.raises(coval_agent_sdk.RunError) as raised:
         await asyncio.wait_for(
@@ -166,8 +166,8 @@ async def test_all_failed_or_deadline_preserves_session_diagnostics(
             }
         return {"run": {"status": "FAILED" if terminal else "RUNNING"}}
 
-    async def session(api, simulation_id, handler, exporter):
-        if terminal or simulation_id == "failed":
+    async def session(api, connection, handler, exporter):
+        if terminal or connection.simulation_id == "failed":
             raise coval_agent_sdk.CovalError("synthetic session error")
         try:
             await asyncio.Event().wait()

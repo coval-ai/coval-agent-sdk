@@ -15,6 +15,7 @@ from coval_agent_sdk import config
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
 from coval_agent_sdk import telemetry
+from coval_agent_sdk import text
 
 
 def test_public_facade_exports_the_documented_definitions():
@@ -32,6 +33,8 @@ def test_public_facade_exports_the_documented_definitions():
         "TraceResult": results.TraceResult,
         "TraceExporter": telemetry.TraceExporter,
         "AudioConnection": audio.AudioConnection,
+        "CovalTextClient": client.CovalTextClient,
+        "TextConnection": text.TextConnection,
     }
     assert set(coval_agent_sdk.__all__) == set(expected)
     for name, definition in expected.items():

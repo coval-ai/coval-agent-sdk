@@ -1,4 +1,4 @@
-"""Immutable configuration for launching a voice simulation run."""
+"""Immutable configuration for launching a simulation run."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from coval_agent_sdk import _defaults
 
 @dataclasses.dataclass(frozen=True)
 class RunConfig:
-    """Identify the fixtures, concurrency, and deadline of a voice run.
+    """Identify the fixtures, concurrency, and deadline of a run.
 
     Attributes:
         agent_id: Coval agent fixture identifier.

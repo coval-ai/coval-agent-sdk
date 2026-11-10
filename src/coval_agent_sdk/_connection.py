@@ -97,7 +97,7 @@ async def wait_for_offer(
     )
 
 
-async def open_voice_connection(
+async def open_relay_connection(
     api: _http.CovalApi, simulation_id: str
 ) -> client.ClientConnection:
     """Retry a live offer through transient WebSocket handshake failures."""
@@ -160,6 +160,6 @@ async def open_voice_connection(
         retry_delay_seconds = _defaults.POLL_INTERVAL_SECONDS
     raise errors.CovalError(
         f"Simulation {simulation_id} could not "
-        f"connect to its voice relay "
+        f"connect to its relay "
         f"before the deadline."
     ) from last_error
