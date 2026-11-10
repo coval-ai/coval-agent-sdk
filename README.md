@@ -53,7 +53,9 @@ if __name__ == "__main__":
 
 `on_connection` receives a ready `AudioConnection`. Feed `receive_audio()` into your pipeline and independently send its speech with `send_audio()`. Keep the handler active until the conversation ends, then finish conversation tasks and spans before returning. Handlers may run concurrently; keep conversation state separate.
 
-The client defaults to `https://api.coval.dev/v1`. Set `api_base_url` to use another API root. Audio is PCM16 little-endian, mono, 16 kHz; see the [audio guide](https://docs.coval.ai/sdks/agent-sdk#audio-format-and-limits) for format and buffering requirements.
+The client defaults to `https://api.coval.dev/v1`. Custom `api_base_url` values require HTTPS. Local development may use HTTP with `localhost` or a loopback IP address. Configure the final API root directly. Redirects return an SDK error. See [API URL validation](https://github.com/coval-ai/coval-agent-sdk/blob/main/docs/developer-api.md#argument-validation) for the accepted forms.
+
+Audio is PCM16 little-endian, mono, 16 kHz. See the [audio guide](https://docs.coval.ai/sdks/agent-sdk#audio-format-and-limits) for format and buffering requirements.
 
 ## Run a text conversation
 

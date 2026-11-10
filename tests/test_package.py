@@ -87,24 +87,80 @@ def test_package_has_no_executable_entry_point(tmp_path):
 
 
 @pytest.mark.parametrize(
-    "url", ["file:///tmp/api", "ftp://example.test/api", ""]
+    "client_type",
+    [coval_agent_sdk.CovalVoiceClient, coval_agent_sdk.CovalTextClient],
 )
-def test_client_rejects_non_http_api_roots(url):
-    with pytest.raises(ValueError, match="http or https"):
-        coval_agent_sdk.CovalVoiceClient(
-            api_key="synthetic-key", api_base_url=url
-        )
+@pytest.mark.parametrize(
+    "url",
+    [
+        "",
+        "file:///tmp/api",
+        "ftp://localhost/v1",
+        "api.example.test/v1",
+        "https:///v1",
+        "https:api.example.test/v1",
+        "http://api.example.test/v1",
+        "http://192.168.1.20/v1",
+        "http://169.254.169.254/v1",
+        "http://localhost.example.test/v1",
+        "http://127.0.0.1.example.test/v1",
+        "http://127.0.0.1%2eexample.test/v1",
+        "http://[::1%25lo0]:8000/v1",
+        "http://127.0.0.1:invalid/v1",
+        "https://api.example.test:65536/v1",
+        "https://api.example.test:0/v1",
+        "http://external.example\\@localhost/v1",
+        "http://local\thost/v1",
+        "\x00http://localhost/v1",
+        " https://api.example.test/v1",
+        "https://api.example.test/v1?",
+        "https://api.example.test/v1#",
+    ],
+)
+def test_clients_reject_unsupported_api_roots(client_type, url):
+    with pytest.raises(ValueError, match="api_base_url"):
+        client_type(api_key="synthetic-key", api_base_url=url)
 
 
 @pytest.mark.parametrize(
-    "url", ["http://127.0.0.1:8081/v1", "https://api.coval.dev/v1"]
+    "client_type",
+    [coval_agent_sdk.CovalVoiceClient, coval_agent_sdk.CovalTextClient],
 )
-def test_client_accepts_http_and_https_api_roots(url):
-    voice = coval_agent_sdk.CovalVoiceClient(
-        api_key="synthetic-key", api_base_url=url
-    )
-    assert voice._api.api_base_url == url
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://api.coval.dev/v1",
+        "https://api.example.test:8443/custom/v1/",
+        "http://localhost:8081/v1",
+        "http://LOCALHOST:8081/v1",
+        "http://127.0.0.1:8081/v1",
+        "http://127.0.0.2:8081/v1",
+        "http://[::1]:8081/v1",
+    ],
+)
+def test_clients_accept_https_and_explicit_loopback_http(client_type, url):
+    voice = client_type(api_key="synthetic-key", api_base_url=url)
+    assert voice._api.api_base_url == url.rstrip("/")
     assert not hasattr(voice, "api")
+
+
+@pytest.mark.parametrize(
+    "url",
+    [
+        "https://user:example-value@api.example.test/v1",
+        "http://example-value@localhost/v1",
+        "https://api.example.test/v1?token=example-value",
+        "https://api.example.test/v1#example-value",
+        "https://user:example-value@api.example.test:invalid/v1",
+    ],
+)
+def test_api_root_validation_errors_omit_supplied_url_values(url):
+    with pytest.raises(ValueError, match="api_base_url") as failure:
+        coval_agent_sdk.CovalVoiceClient(
+            api_key="synthetic-key", api_base_url=url
+        )
+    assert "example-value" not in str(failure.value)
+    assert failure.value.__cause__ is None
 
 
 def test_distribution_declares_and_contains_license_notices():
