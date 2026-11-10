@@ -1,4 +1,4 @@
-"""Public client for runs and conversation audio connections."""
+"""Public clients for runs and conversation audio or text connections."""
 
 from __future__ import annotations
 
@@ -15,17 +15,11 @@ from coval_agent_sdk import audio
 from coval_agent_sdk import config
 from coval_agent_sdk import results
 from coval_agent_sdk import telemetry
+from coval_agent_sdk import text
 
 
-class CovalVoiceClient:
-    """Connect existing voice pipelines to Coval through outbound audio.
-
-    The application owns its agent and pipeline lifecycle. This client does not
-    construct agents, replay consumed relay offers, or retry run creation.
-
-    Attributes:
-        trace_exporter: Optional exporter shared with application tracing.
-    """
+class _Client:
+    """Hold API configuration shared by the voice and text clients."""
 
     def __init__(
         self,
@@ -53,6 +47,17 @@ class CovalVoiceClient:
         )
         self.trace_exporter = trace_exporter
 
+
+class CovalVoiceClient(_Client):
+    """Connect existing voice pipelines to Coval through outbound audio.
+
+    The application owns its agent and pipeline lifecycle. This client does not
+    construct agents, replay consumed relay offers, or retry run creation.
+
+    Attributes:
+        trace_exporter: Optional exporter shared with application tracing.
+    """
+
     @contextlib.asynccontextmanager
     async def connect(
         self, simulation_id: str
@@ -75,7 +80,7 @@ class CovalVoiceClient:
                 transport and trace cleanup.
         """
         async with _session.open_session(
-            self._api, simulation_id, self.trace_exporter
+            self._api, audio.AudioConnection(simulation_id), self.trace_exporter
         ) as connection:
             yield connection
 
@@ -109,5 +114,82 @@ class CovalVoiceClient:
             Exception: Application errors and cancellation propagate unchanged.
         """
         return await _runs.launch_and_run(
-            self._api, config, on_connection, self.trace_exporter
+            self._api,
+            config,
+            audio.AudioConnection,
+            on_connection,
+            self.trace_exporter,
+        )
+
+
+class CovalTextClient(_Client):
+    """Connect existing text agents to Coval's simulated users.
+
+    Each simulated-user message is one turn; reply with one complete message.
+    The application owns its agent and conversation state. This client does not
+    construct agents, replay consumed relay offers, or retry run creation. Use
+    an agent whose type is MODEL_TYPE_SDK_CHAT.
+
+    Attributes:
+        trace_exporter: Optional exporter shared with application tracing.
+    """
+
+    @contextlib.asynccontextmanager
+    async def connect(
+        self, simulation_id: str
+    ) -> AsyncGenerator[text.TextConnection, None]:
+        """Open an existing simulation's text connection after readiness.
+
+        Keep the context open until the conversation ends. Stop application
+        tasks and end spans before leaving; the SDK then closes its transport
+        and finalizes connection.result. Early normal exit is an SDK failure.
+
+        Args:
+            simulation_id: Existing hosted conversation identifier.
+
+        Yields:
+            Ready text connection, independent of any agent framework.
+
+        Raises:
+            errors.CovalError: Discovery, relay protocol, or early exit fails,
+                including a simulation whose agent is not a text SDK agent.
+            Exception: Application exceptions and cancellation propagate after
+                transport and trace cleanup.
+        """
+        async with _session.open_session(
+            self._api, text.TextConnection(simulation_id), self.trace_exporter
+        ) as connection:
+            yield connection
+
+    async def run(
+        self,
+        config: config.RunConfig,
+        on_connection: Callable[[text.TextConnection], Awaitable[None]],
+    ) -> results.RunResult:
+        """Launch a run and deliver each ready text connection to the handler.
+
+        The handler reads simulated-user messages, sends replies, and returns
+        after the conversation ends. It may run concurrently for different
+        conversations. Failure and cancellation behavior matches
+        CovalVoiceClient.run().
+
+        Args:
+            config: Fixture identifiers, concurrency, and total run deadline.
+            on_connection: Async function accepting one TextConnection.
+
+        Returns:
+            Hosted run identity, completion status, and conversation outcomes.
+
+        Raises:
+            errors.RunError: A launched run fails, retaining partial outcomes.
+            errors.CovalError: Launch or transport fails. Local cleanup does
+                not cancel hosted work.
+            Exception: Application errors and cancellation propagate unchanged.
+        """
+        return await _runs.launch_and_run(
+            self._api,
+            config,
+            text.TextConnection,
+            on_connection,
+            self.trace_exporter,
         )

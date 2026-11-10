@@ -1,6 +1,7 @@
-"""Connect Python voice agents to Coval over outbound WebSockets."""
+"""Connect Python voice and text agents to Coval over outbound WebSockets."""
 
 from coval_agent_sdk.audio import AudioConnection
+from coval_agent_sdk.client import CovalTextClient
 from coval_agent_sdk.client import CovalVoiceClient
 from coval_agent_sdk.config import RunConfig
 from coval_agent_sdk.errors import CovalConnectionError
@@ -13,6 +14,7 @@ from coval_agent_sdk.results import ConversationResult
 from coval_agent_sdk.results import RunResult
 from coval_agent_sdk.results import TraceResult
 from coval_agent_sdk.telemetry import TraceExporter
+from coval_agent_sdk.text import TextConnection
 
 __all__ = [
     "AudioConnection",
@@ -21,11 +23,13 @@ __all__ = [
     "CovalConnectionError",
     "CovalError",
     "CovalHttpError",
+    "CovalTextClient",
     "CovalTraceError",
     "CovalVoiceClient",
     "RunConfig",
     "RunError",
     "RunResult",
+    "TextConnection",
     "TraceExporter",
     "TraceResult",
 ]

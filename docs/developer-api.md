@@ -1,6 +1,6 @@
 # Developer API
 
-Integrate an existing voice pipeline through `AudioConnection`. Your application owns pipeline construction, conversation state, provider resources, and cleanup.
+Integrate an existing voice pipeline through `AudioConnection`, or a text agent through `TextConnection`. Your application owns pipeline construction, conversation state, provider resources, and cleanup.
 
 ## Developer journey
 
@@ -14,11 +14,15 @@ For an existing simulation, use `async with client.connect(simulation_id) as con
 
 Framework plugins use this connection as an input/output transport. They may live in consumer projects; the core never imports their dependencies. For the integration workflow, see the [Agent SDK guide](https://docs.coval.ai/sdks/agent-sdk).
 
+## Text interface
+
+`CovalTextClient` has the same constructor, `run()` and `connect()` entry points as `CovalVoiceClient`, and serves agents whose type is `MODEL_TYPE_SDK_CHAT`. Its handlers receive a `TextConnection`, which exposes `simulation_id`, `receive_messages()`, `send_message(str)`, `wait_closed()`, `closed`, and `result`. Each received string is one complete simulated-user turn; each `send_message()` call is one complete agent reply of at most 64 KiB UTF-8. Sends are serialized and awaited; at most 64 unread messages are buffered. Connecting a voice client to a text simulation, or the reverse, raises `CovalError` before the handler runs. See [runtime contracts](runtime.md#text-sessions) for completion and failure semantics.
+
 ## Results and failures
 
 `run()` returns immutable `RunResult` with `run_id`, hosted `status`, `conversations: tuple[ConversationResult, ...]`, and `failures: tuple[ConversationFailure, ...]` (empty on success). Successful completion requires a completed hosted run and all observed conversations attached and completed locally. Execution completion does not mean quality criteria passed.
 
-After a successful connection context, `connection.result` is a `ConversationResult` with `simulation_id`, local voice `status`, PCM byte counts, and optional `trace: TraceResult`. Disabled tracing is None; delivery failures retain structured diagnostics without failing completed voice. Results contain no dependency clients, credentials or transport objects.
+After a successful connection context, `connection.result` is a `ConversationResult` with `simulation_id`, local session `status`, PCM byte counts, text message counts (`received_messages`, `sent_messages`), and optional `trace: TraceResult`. Voice sessions report zero messages and text sessions report zero audio bytes. Disabled tracing is None; delivery failures retain structured diagnostics without failing completed voice. Results contain no dependency clients, credentials or transport objects.
 
 An SDK session failure does not stop unrelated or queued conversations. Once the batch finishes, it raises `RunError`; `error.result.conversations` contains successful sessions and `error.result.failures` retains each failed simulation ID, SDK exception `error_type`, and diagnostic `message`. A hosted COMPLETED status cannot override a local transport failure. Global monitoring failures, session authentication/authorization failures and the batch deadline still stop local work promptly. After launch, SDK run failures retain the last observed hosted status in the error result. Application exceptions and cancellation propagate unchanged after local cleanup. All SDK-owned errors derive from `CovalError`; they do not contain generated API SDK response types. The application owns presentation; the SDK emits no logs or console output.
 
@@ -28,7 +32,7 @@ Install `coval-agent-sdk` from PyPI and import `coval_agent_sdk`. Install `coval
 
 ## Argument validation
 
-Python rejects missing required arguments and unknown keywords with `TypeError`. `CovalVoiceClient` constructor arguments are keyword-only. `RunConfig` validates nonempty required identifiers, positive iterations/concurrency, and a positive finite deadline during construction, raising `ValueError` for those invalid values. The client rejects API roots whose scheme is neither HTTP nor HTTPS. These local checks run before any network request.
+Python rejects missing required arguments and unknown keywords with `TypeError`. `CovalVoiceClient` and `CovalTextClient` constructor arguments are keyword-only. `RunConfig` validates nonempty required identifiers, positive iterations/concurrency, and a positive finite deadline during construction, raising `ValueError` for those invalid values. The client rejects API roots whose scheme is neither HTTP nor HTTPS. These local checks run before any network request.
 
 Type annotations do not provide general runtime type validation. Current value checks do not require identifiers to be strings or iterations/concurrency to be integers; some incorrect types pass construction, while others produce Python errors when used. Client construction does not reject an empty API key or verify that credentials and fixture identifiers exist or belong to the selected workspace. Those checks belong to the server and failures are reported through SDK HTTP errors when a request is made. Result dataclasses are immutable but do not validate their annotated field types at construction.
 

@@ -1,4 +1,4 @@
-"""Internal API, relay, audio, and buffering defaults."""
+"""Internal API, relay, audio, text, and buffering defaults."""
 
 DEFAULT_API_BASE_URL = "https://api.coval.dev/v1"
 HTTP_TIMEOUT_SECONDS = 15
@@ -21,6 +21,8 @@ VOICE_CHUNK_BYTES = int(
 )
 MAX_SEND_BYTES = 2 * 1024 * 1024
 MAX_RECEIVE_BYTES = 64 * 1024
+MAX_TEXT_MESSAGE_BYTES = 64 * 1024
+MAX_UNREAD_TEXT_MESSAGES = 64
 CLOSE_CONFIRM_TIMEOUT_SECONDS = 10
 TERMINAL_CONNECTION_STATUSES = frozenset(
     {"CONNECTED", "CLOSED", "FAILED", "CANCELLED"}

@@ -18,6 +18,7 @@ from coval_agent_sdk import _defaults
 from coval_agent_sdk import _http
 from coval_agent_sdk import _runs
 from coval_agent_sdk import _session
+from coval_agent_sdk import audio
 from coval_agent_sdk import config as run_config
 from coval_agent_sdk import errors
 from coval_agent_sdk import results
@@ -121,7 +122,10 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                             errors.RunError, "within 10 seconds"
                         ) as failure:
                             await _runs.launch_and_run(
-                                BatchApi(), config, mock.Mock()
+                                BatchApi(),
+                                config,
+                                audio.AudioConnection,
+                                mock.Mock(),
                             )
                         self.assertEqual(
                             failure.exception.result.run_id, "run-1"
@@ -134,7 +138,10 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                         )
                     else:
                         await _runs.launch_and_run(
-                            BatchApi(), config, mock.Mock()
+                            BatchApi(),
+                            config,
+                            audio.AudioConnection,
+                            mock.Mock(),
                         )
                 self.assertEqual(cancelled, expires)
 
@@ -190,7 +197,10 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
             mock.patch.object(_defaults, "POLL_INTERVAL_SECONDS", 0),
         ):
             await asyncio.wait_for(
-                _runs.launch_and_run(api, config, mock.Mock()), timeout=1
+                _runs.launch_and_run(
+                    api, config, audio.AudioConnection, mock.Mock()
+                ),
+                timeout=1,
             )
         self.assertTrue(session_finished.is_set())
         self.assertFalse(session_cancelled)
@@ -450,7 +460,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                 errors.CovalError, "connect deadline"
             ) as raised,
         ):
-            await _connection.open_voice_connection(mock.Mock(), "simulation-1")
+            await _connection.open_relay_connection(mock.Mock(), "simulation-1")
         self.assertIsInstance(
             raised.exception.__cause__, SeparateAsyncTimeoutError
         )
@@ -484,7 +494,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                     mock.patch.object(_connection.client, "connect", connector),
                     mock.patch.object(asyncio, "sleep", new=mock.AsyncMock()),
                 ):
-                    opened = await _connection.open_voice_connection(
+                    opened = await _connection.open_relay_connection(
                         mock.Mock(), "simulation-1"
                     )
 
@@ -533,7 +543,7 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                     ) as sleep,
                     self.assertRaises(errors.CovalError) as raised,
                 ):
-                    await _connection.open_voice_connection(
+                    await _connection.open_relay_connection(
                         mock.Mock(), "simulation-1"
                     )
                 self.assertIs(raised.exception.__cause__, failure)
@@ -546,9 +556,9 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
         waiting_cancelled = asyncio.Event()
 
         async def fake_run_session(
-            api, simulation_id, on_connection, trace_exporter
+            api, connection, on_connection, trace_exporter
         ) -> None:
-            if simulation_id == "broken":
+            if connection.simulation_id == "broken":
                 await waiting_started.wait()
                 raise errors.CovalHttpError(
                     status_code=403, message="session denied"
@@ -567,7 +577,9 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
             mock.patch.object(_defaults, "POLL_INTERVAL_SECONDS", 0),
             self.assertRaisesRegex(errors.CovalError, "session denied"),
         ):
-            await _runs.launch_and_run(FakeApi(), config, lambda _id: None)
+            await _runs.launch_and_run(
+                FakeApi(), config, audio.AudioConnection, lambda _id: None
+            )
 
         self.assertTrue(waiting_cancelled.is_set())
 
@@ -611,10 +623,15 @@ class ClientLifecycleTest(unittest.IsolatedAsyncioTestCase):
                     ),
                 ):
                     await _runs.launch_and_run(
-                        CompletedApi(), config, lambda _id: None
+                        CompletedApi(),
+                        config,
+                        audio.AudioConnection,
+                        lambda _id: None,
                     )
                 run_session.assert_awaited_once()
-                self.assertEqual(run_session.await_args.args[1], "attached")
+                self.assertEqual(
+                    run_session.await_args.args[1].simulation_id, "attached"
+                )
 
 
 if __name__ == "__main__":

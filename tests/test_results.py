@@ -82,7 +82,7 @@ def setup_run(
         mock.AsyncMock(return_value={"run": {"run_id": "run-a"}}),
     )
     monkeypatch.setattr(client._api, "get", read)
-    monkeypatch.setattr(_connection, "open_voice_connection", connect)
+    monkeypatch.setattr(_connection, "open_relay_connection", connect)
     monkeypatch.setattr(_defaults, "POLL_INTERVAL_SECONDS", 0)
     return sockets
 
@@ -95,7 +95,7 @@ async def test_run_defers_queued_connections_within_batch_deadline(
     clock, calls, connected = [0.0], [0], []
     client = coval_agent_sdk.CovalVoiceClient(api_key="synthetic-key")
     sockets = setup_run(monkeypatch, client)
-    original = _connection.open_voice_connection
+    original = _connection.open_relay_connection
 
     async def connect(api, simulation_id):
         connected.append(clock[0])
@@ -122,7 +122,7 @@ async def test_run_defers_queued_connections_within_batch_deadline(
             "run": {"status": "IN PROGRESS" if calls[0] == 1 else "COMPLETED"}
         }
 
-    monkeypatch.setattr(_connection, "open_voice_connection", connect)
+    monkeypatch.setattr(_connection, "open_relay_connection", connect)
     monkeypatch.setattr(client._api, "get", read)
     monkeypatch.setattr(
         _runs, "time", types.SimpleNamespace(monotonic=lambda: clock[0])
@@ -423,7 +423,7 @@ async def test_session_isolation_preserves_application_cleanup_and_fatal_errors(
             )
             return sockets[simulation_id]
 
-        monkeypatch.setattr(_connection, "open_voice_connection", connect)
+        monkeypatch.setattr(_connection, "open_relay_connection", connect)
     original = (
         coval_agent_sdk.CovalError("SDK failed")
         if failure_kind == "sdk"
