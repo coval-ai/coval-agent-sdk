@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.2.1 (2026-11-10)
+
+### Bug Fixes
+
+- [COVAL-9263] require HTTPS for custom API URLs
+  ([#11](https://github.com/coval-ai/coval-agent-sdk/pull/11),
+  [`2c50eb2`](https://github.com/coval-ai/coval-agent-sdk/commit/2c50eb27db4957cb64505caa01cdd3a6c94b887e))
+
+
 ## v0.2.0 (2026-11-10)
 
 ### Features
