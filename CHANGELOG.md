@@ -1,6 +1,14 @@
 # CHANGELOG
 
 
+## v0.2.0 (2026-11-10)
+
+### Features
+
+- [COVAL-9228] support text agents ([#10](https://github.com/coval-ai/coval-agent-sdk/pull/10),
+  [`0e78a9f`](https://github.com/coval-ai/coval-agent-sdk/commit/0e78a9ff2ddb441ea0c94d82ce3d888b5534874b))
+
+
 ## v0.1.4 (2026-10-30)
 
 ### Bug Fixes
