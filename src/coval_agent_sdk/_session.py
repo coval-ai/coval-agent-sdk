@@ -162,7 +162,24 @@ class _Session:
             while True:
                 try:
                     if self.state.ready.is_set():
-                        message = await anext(messages)
+                        if isinstance(self.state, _text.TextState):
+                            # A dead relay room never fails the socket; bound
+                            # the wait so the session fails visibly instead
+                            # of hanging after session_ready.
+                            try:
+                                message = await asyncio.wait_for(
+                                    anext(messages),
+                                    _defaults.TEXT_SESSION_INACTIVITY_SECONDS,
+                                )
+                            except asyncio.TimeoutError as exception:
+                                raise errors.CovalConnectionError(
+                                    "The simulated user's connection "
+                                    "went silent for "
+                                    f"{_defaults.TEXT_SESSION_INACTIVITY_SECONDS:g}"
+                                    " seconds after session_ready."
+                                ) from exception
+                        else:
+                            message = await anext(messages)
                     else:
                         message = await asyncio.wait_for(
                             anext(messages),
