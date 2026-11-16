@@ -8,10 +8,11 @@ CONNECT_WAIT_SECONDS = 300
 # indistinguishable from a quiet conversation: the edge answers WebSocket
 # pings for a dead room, so the socket looks healthy while no frame ever
 # arrives. Bound how long a text session may wait for the simulated user's
-# next frame so the failure surfaces instead of hanging forever. Persona
-# turns arrive within seconds; agents pausing for tool calls pause the
-# send path, not this receive window.
-TEXT_SESSION_INACTIVITY_SECONDS = 300
+# next frame so the failure surfaces instead of hanging forever. The window
+# spans the application's total processing time for one turn, not one
+# request, so it stays well above slow multi-request agent turns; only the
+# simulated user's next frame resets it.
+TEXT_SESSION_INACTIVITY_SECONDS = 600
 CONNECT_RETRY_MAX_SECONDS = 8
 RUN_WAIT_SECONDS = 3_600
 MONITORING_RETRY_SECONDS = 30
