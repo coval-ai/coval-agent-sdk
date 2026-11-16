@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.2.3 (2026-11-16)
+
+### Bug Fixes
+
+- Widen the text session inactivity deadline to 600 seconds
+  ([#13](https://github.com/coval-ai/coval-agent-sdk/pull/13),
+  [`5b06d79`](https://github.com/coval-ai/coval-agent-sdk/commit/5b06d79afdfb9d0f5420ce434141ed094a054c6a))
+
+
 ## v0.2.2 (2026-11-16)
 
 ### Bug Fixes
