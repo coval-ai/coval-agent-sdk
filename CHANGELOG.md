@@ -1,6 +1,15 @@
 # CHANGELOG
 
 
+## v0.2.2 (2026-11-16)
+
+### Bug Fixes
+
+- Fail text sessions at a receive inactivity deadline
+  ([#12](https://github.com/coval-ai/coval-agent-sdk/pull/12),
+  [`dcf6bd5`](https://github.com/coval-ai/coval-agent-sdk/commit/dcf6bd528742cf41e907a92dddd728a2e95a72be))
+
+
 ## v0.2.1 (2026-11-10)
 
 ### Bug Fixes
