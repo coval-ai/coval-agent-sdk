@@ -150,6 +150,42 @@ async def test_attach_validates_arguments_before_any_request(
 
 
 @pytest.mark.asyncio
+async def test_a_silent_relay_fails_the_session_after_the_inactivity_deadline(
+    monkeypatch, api_endpoint, tls_contexts
+):
+    url, state = api_endpoint
+    serving, trusting = tls_contexts
+    monkeypatch.setattr(_defaults, "TEXT_SESSION_INACTIVITY_SECONDS", 0.2)
+
+    async def relay(socket):
+        # A relay room that stops forwarding after session_ready: no message, no
+        # close, the shape of the production stalls where the room dies mid-way.
+        await socket.send(TEXT_READY)
+        await socket.wait_closed()
+
+    entered = []
+
+    async def serve_until_silent() -> None:
+        async with _client(url).connect(IDS[0]) as connection:
+            entered.append(True)
+            async for message in connection.receive_messages():
+                await connection.send_message(f"Echo: {message}")
+
+    _trust(monkeypatch, trusting)
+    hosted = await _serve(relay, serving, state)
+    try:
+        with pytest.raises(
+            coval_agent_sdk.CovalError,
+            match=r"went silent for 0\.2 seconds",
+        ):
+            await serve_until_silent()
+    finally:
+        hosted.close()
+        await hosted.wait_closed()
+    assert entered == [True]
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     ("ready", "client_type", "message"),
     [

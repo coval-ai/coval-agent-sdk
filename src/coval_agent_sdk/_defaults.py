@@ -4,6 +4,14 @@ DEFAULT_API_BASE_URL = "https://api.coval.dev/v1"
 HTTP_TIMEOUT_SECONDS = 15
 POLL_INTERVAL_SECONDS = 2
 CONNECT_WAIT_SECONDS = 300
+# After session_ready, a relay room that stops forwarding frames is
+# indistinguishable from a quiet conversation: the edge answers WebSocket
+# pings for a dead room, so the socket looks healthy while no frame ever
+# arrives. Bound how long a text session may wait for the simulated user's
+# next frame so the failure surfaces instead of hanging forever. Persona
+# turns arrive within seconds; agents pausing for tool calls pause the
+# send path, not this receive window.
+TEXT_SESSION_INACTIVITY_SECONDS = 300
 CONNECT_RETRY_MAX_SECONDS = 8
 RUN_WAIT_SECONDS = 3_600
 MONITORING_RETRY_SECONDS = 30
